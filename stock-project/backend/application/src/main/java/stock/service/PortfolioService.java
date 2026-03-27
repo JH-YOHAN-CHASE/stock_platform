@@ -45,7 +45,11 @@ public class PortfolioService {
 
     // 공개 포트폴리오 목록 (비교용)
     public List<PortfolioDto.SummaryResponse> getPublicPortfolios(Long userId) {
-        return portfolioRepository.findPublicPortfoliosExcludingUser(userId).stream()
+        //return portfolioRepository.findPublicPortfoliosExcludingUser(userId).stream()
+          //      .map(portfolioConverter::toSummaryResponse)
+            //    .collect(Collectors.toList());
+
+        return portfolioRepository.findAllPublicPortfolios().stream()
                 .map(portfolioConverter::toSummaryResponse)
                 .collect(Collectors.toList());
     }
