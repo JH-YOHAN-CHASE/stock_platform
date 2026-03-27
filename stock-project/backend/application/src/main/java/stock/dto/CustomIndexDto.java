@@ -1,5 +1,6 @@
 package stock.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import stock.entity.IndexComponent;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -23,6 +24,7 @@ public class CustomIndexDto {
         @Size(max = 300, message = "설명은 300자 이내")
         private String description;
 
+        @JsonProperty("isPublic")
         private boolean isPublic = false;
 
         @Valid
@@ -40,6 +42,7 @@ public class CustomIndexDto {
         @Size(max = 300)
         private String description;
 
+        @JsonProperty("isPublic")
         private boolean isPublic;
 
         @Valid
@@ -80,6 +83,7 @@ public class CustomIndexDto {
         private String userName;
         private String name;
         private String description;
+        @JsonProperty("isPublic")
         private boolean isPublic;
         private List<ComponentResponse> components;
         private LocalDateTime createdAt;
@@ -106,6 +110,7 @@ public class CustomIndexDto {
         private String userName;
         private String name;
         private String description;
+        @JsonProperty("isPublic")
         private boolean isPublic;
         private int componentCount;
         private LocalDateTime createdAt;
