@@ -1,10 +1,10 @@
-# StockIndex — 나만의 포트폴리오 & 경제 지수 플랫폼
+# 나만의 포트폴리오 & 경제 지수 플랫폼
 
 ## 프로젝트 개요
 
 - **포트폴리오 관리**: 원하는 종목으로 포트폴리오를 만들고 다른 사용자와 비교
 - **나만의 지수**: 금리·환율·유가·관세·CPI·고용지표 등으로 커스텀 경제 지수 설계
-- **소셜 로그인**: Google / 네이버 OAuth2
+- **소셜 로그인**: Google보류 / 네이버 OAuth2
 - **공개/비공개**: 포트폴리오·지수를 공개해 다른 사용자와 공유
 
 ---
@@ -83,9 +83,9 @@ docker-compose up -d
 
 `.env.example`을 참고해 실제 키를 발급하세요.
 
-**Google OAuth2**
-- https://console.cloud.google.com → OAuth 2.0 클라이언트 ID 생성
-- 승인된 리디렉션 URI: `http://localhost:8083/login/oauth2/code/google`
+//**Google OAuth2**
+//- https://console.cloud.google.com → OAuth 2.0 클라이언트 ID 생성
+//- 승인된 리디렉션 URI: `http://localhost:8083/login/oauth2/code/google`
 
 **네이버 OAuth2**
 - https://developers.naver.com → 애플리케이션 등록
