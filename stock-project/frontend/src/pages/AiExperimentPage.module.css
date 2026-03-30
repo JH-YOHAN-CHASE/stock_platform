@@ -1,0 +1,184 @@
+/* src/pages/AiExperimentPage.module.css */
+.layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 24px;
+    align-items: start;
+    margin-top: 24px;
+}
+
+.selectorCard {
+    position: sticky;
+    top: 24px;
+    background-color: var(--bg2);
+}
+
+.selectorTitle {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    color: var(--text2);
+    font-weight: 400;
+}
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.sectionHeader {
+    font-size: 12px;
+    color: var(--text3);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 10px;
+    margin-bottom: 2px;
+}
+
+.listItem {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.listItem:hover {
+    background-color: var(--bg3);
+}
+
+.listItemSelected {
+    border-color: var(--accent);
+    background-color: rgba(59, 130, 246, 0.08);
+}
+
+/* Radio Button Styling */
+.listItemRadio {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.listItemRadioSelected {
+    border-color: var(--accent);
+}
+
+.radioThumb {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--accent);
+}
+
+/* Checkbox Styling */
+.listItemCheck {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: var(--accent);
+    flex-shrink: 0;
+    background-color: var(--bg);
+}
+
+.listItemSelected .listItemCheck {
+    border-color: var(--accent);
+    background-color: var(--accent);
+    color: #fff;
+}
+
+.listItemName {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.listItemMeta {
+    font-size: 12px;
+    color: var(--text3);
+    margin-top: 1px;
+}
+
+.divider {
+    height: 1px;
+    background-color: var(--border);
+    margin: 10px 0;
+}
+
+.placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    min-height: 400px;
+    background: var(--bg2);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+}
+
+.placeholderIcon {
+    font-size: 48px;
+    color: var(--text3);
+}
+
+.placeholderText {
+    font-size: 15px;
+    color: var(--text2);
+}
+
+.chartTitle {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 20px;
+}
+
+.summaryGrid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+}
+
+.summaryItem {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.summaryLabel {
+    font-size: 12px;
+    color: var(--text3);
+}
+
+.summaryValue {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text);
+}

@@ -7,6 +7,7 @@ const NAV = [
   { to: '/portfolios',      label: '포트폴리오',       icon: '▦' },
   { to: '/portfolios/compare', label: '포트폴리오 비교', icon: '⇄' },
   { to: '/indexes',         label: '나만의 지수',      icon: '◉' },
+    { to: '/ai-experiment',   label: 'AI & 빅데이터 실험', icon: '🤖' },
 ];
 
 export default function Layout() {
@@ -24,7 +25,7 @@ export default function Layout() {
       <aside className={styles.sidebar}>
         <div className={styles.logo}>
           <span className={styles.logoIcon}>◈</span>
-          <span className={styles.logoText}>StockIndex</span>
+          <span className={styles.logoText}>MONEY CHASING</span>
         </div>
 
         <nav className={styles.nav}>
