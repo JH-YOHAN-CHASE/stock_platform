@@ -138,3 +138,21 @@ export interface ApiResponse<T> {
   message: string;
   data: T;
 }
+// ── AI Simulation ─────────────────────────────────────────────
+export interface SimulationResult {
+    performance: {
+        return: number;    // 예상 수익률
+        drawdown: number;  // 최대 낙폭
+        score: number;     // AI 점수
+    };
+    simulationChart: Array<{
+        period: string;    // "3개월", "6개월" 등
+        value: number;     // 수익률 수치
+    }>;
+    recommendation: string; // AI 분석 텍스트
+    radarChart: Array<{
+        subject: string;   // "금리", "환율" 등
+        portfolio: number;
+        index_avg: number;
+    }>;
+}

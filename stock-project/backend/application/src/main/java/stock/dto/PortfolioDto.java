@@ -92,6 +92,7 @@ public class PortfolioDto {
     @Getter
     @Builder
     public static class ItemResponse {
+        private BigDecimal currentPrice;
         private Long id;
         private String ticker;
         private String stockName;
@@ -99,6 +100,10 @@ public class PortfolioDto {
         private BigDecimal avgBuyPrice;
         private LocalDate purchaseDate;
         private BigDecimal weight;
+
+        public void setCurrentPrice(BigDecimal currentPrice) {
+            this.currentPrice = currentPrice;
+        }
     }
 
     @Getter

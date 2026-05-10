@@ -46,6 +46,7 @@ public class SecurityConfig {
                 .requestMatchers("/login/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/portfolios/public").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/indexes/public").permitAll()
+                    .requestMatchers("/api/ai/**").permitAll()
                 .anyRequest().authenticated()
             )
             .oauth2Login(oauth2 -> oauth2
