@@ -1,33 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { portfolioApi } from '../api/portfolio';
+import { marketApi } from '../api/market';
 import type { PortfolioForm, PortfolioItemForm } from '../types';
 import PageHeader from '../components/common/PageHeader';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
 import styles from './FormPage.module.css';
 
-const EMPTY_ITEM: PortfolioItemForm = {
-    ticker: '', stockName: '', quantity: 1, avgBuyPrice: 0, purchaseDate: '', weight: null,
+const getToday = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-// 💡 [추가] 비중 자동 계산 도우미 함수
+const emptyItem = (): PortfolioItemForm => ({
+    ticker: '', stockName: '', quantity: 1, avgBuyPrice: 0, purchaseDate: getToday(), weight: null,
+});
+
 const recalculateWeights = (items: PortfolioItemForm[]): PortfolioItemForm[] => {
-    // 전체 총 매수금액 계산
     const totalValue = items.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.avgBuyPrice) || 0)), 0);
-
-    // 총액이 0이면 비중을 모두 초기화
-    if (totalValue === 0) {
-        return items.map(item => ({ ...item, weight: null }));
-    }
-
-    // 각 아이템별 비중 계산 (소수점 2자리)
+    if (totalValue === 0) return items.map(item => ({ ...item, weight: null }));
     return items.map(item => {
         const itemValue = (Number(item.quantity) || 0) * (Number(item.avgBuyPrice) || 0);
-        return {
-            ...item,
-            weight: Number(((itemValue / totalValue) * 100).toFixed(2))
-        };
+        return { ...item, weight: Number(((itemValue / totalValue) * 100).toFixed(2)) };
     });
 };
 
@@ -37,8 +32,13 @@ export default function PortfolioFormPage() {
     const navigate = useNavigate();
     const [saving, setSaving] = useState(false);
     const [form, setForm] = useState<PortfolioForm>({
-        name: '', description: '', isPublic: false, items: [{ ...EMPTY_ITEM }],
+        name: '', description: '', isPublic: false, items: [emptyItem()],
     });
+    const [priceLoading, setPriceLoading] = useState<boolean[]>([false]);
+    const formRef = useRef(form);
+    const tickerTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
+    useEffect(() => { formRef.current = form; }, [form]);
 
     useEffect(() => {
         if (isEdit) {
@@ -48,11 +48,15 @@ export default function PortfolioFormPage() {
                     description: p.description ?? '',
                     isPublic: p.isPublic,
                     items: p.items.map((i) => ({
-                        ticker: i.ticker, stockName: i.stockName,
-                        quantity: i.quantity, avgBuyPrice: i.avgBuyPrice,
-                        purchaseDate: i.purchaseDate ?? '', weight: i.weight,
+                        ticker: i.ticker,
+                        stockName: i.stockName,
+                        quantity: i.quantity,
+                        avgBuyPrice: i.avgBuyPrice,
+                        purchaseDate: i.purchaseDate ?? getToday(),
+                        weight: i.weight,
                     })),
                 });
+                setPriceLoading(new Array(p.items.length).fill(false));
             });
         }
     }, [id]);
@@ -60,29 +64,78 @@ export default function PortfolioFormPage() {
     const setField = <K extends keyof PortfolioForm>(k: K, v: PortfolioForm[K]) =>
         setForm((prev) => ({ ...prev, [k]: v }));
 
-    // 💡 [수정] 수량이나 평균단가가 바뀔 때 비중 재계산
     const setItem = (idx: number, k: keyof PortfolioItemForm, v: string | number | null) =>
         setForm((prev) => {
             let items = [...prev.items];
             items[idx] = { ...items[idx], [k]: v };
-
-            // 가격이나 수량이 변경되었다면 전체 비중 다시 계산
             if (k === 'quantity' || k === 'avgBuyPrice') {
                 items = recalculateWeights(items);
             }
-
             return { ...prev, items };
         });
 
-    const addItem = () => setForm((prev) => ({ ...prev, items: [...prev.items, { ...EMPTY_ITEM }] }));
+    const fetchAndFillPrice = async (idx: number, ticker: string, date: string) => {
+        setPriceLoading(prev => { const n = [...prev]; n[idx] = true; return n; });
+        try {
+            const price = date
+                ? await marketApi.getStockPriceByDate(ticker, date)
+                : await marketApi.getStockPrice(ticker);
+            if (price > 0) {
+                setForm((prev) => {
+                    let items = [...prev.items];
+                    items[idx] = { ...items[idx], avgBuyPrice: price };
+                    items = recalculateWeights(items);
+                    return { ...prev, items };
+                });
+            }
+        } catch {
+            // API 실패 시 조용히 무시 — 사용자가 직접 입력 가능
+        } finally {
+            setPriceLoading(prev => { const n = [...prev]; n[idx] = false; return n; });
+        }
+    };
 
-    // 💡 [수정] 종목을 삭제할 때도 남은 종목들의 비중 재계산
-    const removeItem = (idx: number) =>
+    // 종목 검색 필드 변경 — ticker/stockName을 동일값으로 설정 후 가격 자동 조회
+    const handleSearchChange = (idx: number, value: string) => {
+        const upper = value.toUpperCase();
+        setForm((prev) => {
+            const items = [...prev.items];
+            items[idx] = { ...items[idx], ticker: upper, stockName: upper };
+            return { ...prev, items };
+        });
+
+        if (tickerTimers.current[idx]) clearTimeout(tickerTimers.current[idx]);
+
+        if (upper.length >= 4) {
+            tickerTimers.current[idx] = setTimeout(() => {
+                const date = formRef.current.items[idx]?.purchaseDate ?? '';
+                fetchAndFillPrice(idx, upper, date);
+            }, 600);
+        }
+    };
+
+    // 매수일 변경 — 해당 날짜 종가로 평균단가 자동 갱신
+    const handleDateChange = (idx: number, date: string) => {
+        setItem(idx, 'purchaseDate', date);
+        const ticker = formRef.current.items[idx]?.ticker ?? '';
+        if (ticker.length >= 4 && date) {
+            fetchAndFillPrice(idx, ticker, date);
+        }
+    };
+
+    const addItem = () => {
+        setForm((prev) => ({ ...prev, items: [...prev.items, emptyItem()] }));
+        setPriceLoading(prev => [...prev, false]);
+    };
+
+    const removeItem = (idx: number) => {
         setForm((prev) => {
             let items = prev.items.filter((_, i) => i !== idx);
             items = recalculateWeights(items);
             return { ...prev, items };
         });
+        setPriceLoading(prev => prev.filter((_, i) => i !== idx));
+    };
 
     const handleSubmit = async () => {
         if (!form.name.trim()) return alert('포트폴리오 이름을 입력하세요');
@@ -102,8 +155,9 @@ export default function PortfolioFormPage() {
         }
     };
 
-    // 총 매수금액을 화면에 보여주기 위해 렌더링 시 계산
-    const totalInvestment = form.items.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.avgBuyPrice) || 0)), 0);
+    const totalInvestment = form.items.reduce(
+        (sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.avgBuyPrice) || 0)), 0
+    );
 
     return (
         <div>
@@ -113,7 +167,6 @@ export default function PortfolioFormPage() {
             />
 
             <div className={styles.layout}>
-                {/* 기본 정보 */}
                 <Card>
                     <h3 className={styles.cardTitle}>기본 정보</h3>
                     <div className={styles.field}>
@@ -135,14 +188,13 @@ export default function PortfolioFormPage() {
                     </div>
                 </Card>
 
-                {/* 종목 목록 */}
                 <Card>
                     <div className={styles.cardTitleRow}>
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: '15px' }}>
                             <h3 className={styles.cardTitle} style={{ margin: 0 }}>종목 목록</h3>
                             <span style={{ fontSize: '0.9rem', color: 'var(--text2)', fontWeight: 'bold' }}>
-                총 투자 금액: {totalInvestment.toLocaleString()}원
-              </span>
+                                총 투자 금액: {totalInvestment.toLocaleString()}원
+                            </span>
                         </div>
                         <Button variant="secondary" size="sm" onClick={addItem}>＋ 종목 추가</Button>
                     </div>
@@ -156,30 +208,59 @@ export default function PortfolioFormPage() {
                                 )}
                             </div>
                             <div className={styles.itemGrid}>
-                                <div className={styles.field}>
+                                <div className={styles.field} style={{ gridColumn: 'span 2' }}>
                                     <label>종목코드 *</label>
-                                    <input className={styles.input} value={item.ticker} onChange={(e) => setItem(idx, 'ticker', e.target.value.toUpperCase())} placeholder="AAPL / 005930" />
-                                </div>
-                                <div className={styles.field}>
-                                    <label>종목명 *</label>
-                                    <input className={styles.input} value={item.stockName} onChange={(e) => setItem(idx, 'stockName', e.target.value)} placeholder="Apple Inc." />
+                                    <input
+                                        className={styles.input}
+                                        value={item.ticker}
+                                        onChange={(e) => handleSearchChange(idx, e.target.value)}
+                                        placeholder="예: 005930 (4자 이상 입력 시 가격 자동 조회)"
+                                    />
                                 </div>
                                 <div className={styles.field}>
                                     <label>수량 *</label>
-                                    <input className={styles.input} type="number" min={1} value={item.quantity} onChange={(e) => setItem(idx, 'quantity', Number(e.target.value))} />
+                                    <input
+                                        className={styles.input}
+                                        type="number"
+                                        min={1}
+                                        value={item.quantity}
+                                        onChange={(e) => setItem(idx, 'quantity', Number(e.target.value))}
+                                    />
                                 </div>
                                 <div className={styles.field}>
-                                    <label>평균단가 *</label>
-                                    <input className={styles.input} type="number" min={0} step="0.01" value={item.avgBuyPrice} onChange={(e) => setItem(idx, 'avgBuyPrice', Number(e.target.value))} />
+                                    <label>
+                                        평균단가 *
+                                        {priceLoading[idx] && (
+                                            <span style={{ marginLeft: 6, fontSize: '0.7rem', color: 'var(--accent)' }}>조회 중...</span>
+                                        )}
+                                    </label>
+                                    <input
+                                        className={styles.input}
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={item.avgBuyPrice > 0
+                                            ? Number(item.avgBuyPrice).toLocaleString('ko-KR') + ' 원'
+                                            : ''}
+                                        onChange={(e) => {
+                                            const raw = e.target.value.replace(/[^0-9]/g, '');
+                                            setItem(idx, 'avgBuyPrice', raw ? Number(raw) : 0);
+                                        }}
+                                        disabled={priceLoading[idx]}
+                                        style={priceLoading[idx] ? { opacity: 0.6 } : undefined}
+                                        placeholder="종목코드 입력 시 자동 조회"
+                                    />
                                 </div>
                                 <div className={styles.field}>
                                     <label>매수일</label>
-                                    <input className={styles.input} type="date" value={item.purchaseDate} onChange={(e) => setItem(idx, 'purchaseDate', e.target.value)} />
+                                    <input
+                                        className={styles.input}
+                                        type="date"
+                                        value={item.purchaseDate}
+                                        onChange={(e) => handleDateChange(idx, e.target.value)}
+                                    />
                                 </div>
-
-                                {/* 💡 [수정] 비중 입력칸을 자동 계산된 값을 보여주기만 하는 비활성화(readonly) 칸으로 변경 */}
                                 <div className={styles.field}>
-                                    <label>비중 (%) <span style={{fontSize: '0.75rem', color: '#999'}}>(자동계산)</span></label>
+                                    <label>비중 (%) <span style={{ fontSize: '0.75rem', color: '#999' }}>(자동계산)</span></label>
                                     <input
                                         className={styles.input}
                                         type="text"
@@ -194,7 +275,6 @@ export default function PortfolioFormPage() {
                     ))}
                 </Card>
 
-                {/* Actions */}
                 <div className={styles.actions}>
                     <Button variant="secondary" onClick={() => navigate(-1)}>취소</Button>
                     <Button onClick={handleSubmit} loading={saving}>{isEdit ? '저장' : '포트폴리오 생성'}</Button>

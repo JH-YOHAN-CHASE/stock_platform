@@ -8,7 +8,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -55,6 +58,45 @@ public class MarketDataService {
         throw new RuntimeException("증권사 API 토큰 발급에 실패했습니다.");
     }
 
+    public BigDecimal getClosingPriceByDate(String ticker, String date) {
+        String kisDate = date.replace("-", "");
+        log.info("[외부 API 호출] {} 종목 {} 날짜 종가를 요청합니다.", ticker, kisDate);
+        try {
+            String token = getAccessToken();
+            String url = apiUrl + "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice"
+                    + "?FID_COND_MRKT_DIV_CODE=J"
+                    + "&FID_INPUT_ISCD=" + ticker
+                    + "&FID_INPUT_DATE_1=" + kisDate
+                    + "&FID_INPUT_DATE_2=" + kisDate
+                    + "&FID_PERIOD_DIV_CODE=D"
+                    + "&FID_ORG_ADJ_PRC=0";
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("authorization", "Bearer " + token);
+            headers.set("appkey", appKey);
+            headers.set("appsecret", appSecret);
+            headers.set("tr_id", "FHKST03010100");
+
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
+
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                List<Map<String, Object>> output2 = (List<Map<String, Object>>) response.getBody().get("output2");
+                if (output2 != null && !output2.isEmpty()) {
+                    String price = (String) output2.get(0).get("stck_clpr");
+                    if (price != null && !price.isBlank()) {
+                        BigDecimal result = new BigDecimal(price);
+                        log.info("[KIS API] {} {} 종가 조회 성공: {}원", ticker, kisDate, result);
+                        return result;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("[KIS API] {} 날짜별 종가 조회 실패: {}", ticker, e.getMessage());
+        }
+        return BigDecimal.ZERO;
+    }
+
     @Cacheable(value = "stockPrices", key = "#ticker", unless = "#result == null || #result.compareTo(java.math.BigDecimal.ZERO) == 0")
     public BigDecimal getClosingPrice(String ticker) {
         // 💡 [리팩토링] KIS 초당 호출 제한(TPS) 방지를 위해 0.5초 대기
@@ -93,5 +135,100 @@ public class MarketDataService {
         }
 
         return BigDecimal.ZERO;
+    }
+
+    public BigDecimal getUsClosingPrice(String ticker) {
+        log.info("[Yahoo Finance] 미국 주식 {} 현재가를 요청합니다.", ticker);
+        BigDecimal usdPrice = fetchYahooCurrentPrice(ticker);
+        if (usdPrice.compareTo(BigDecimal.ZERO) == 0) return BigDecimal.ZERO;
+        BigDecimal rate = fetchUsdKrwRate("1d", null);
+        BigDecimal krw = usdPrice.multiply(rate).setScale(0, java.math.RoundingMode.HALF_UP);
+        log.info("[Yahoo Finance] {} ${} × {}원 = {}원", ticker, usdPrice, rate.setScale(0, java.math.RoundingMode.HALF_UP), krw);
+        return krw;
+    }
+
+    public BigDecimal getUsClosingPriceByDate(String ticker, String date) {
+        log.info("[Yahoo Finance] 미국 주식 {} {} 날짜 종가를 요청합니다.", ticker, date);
+        BigDecimal usdPrice = fetchYahooPriceByDate(ticker, date);
+        if (usdPrice.compareTo(BigDecimal.ZERO) == 0) return BigDecimal.ZERO;
+        BigDecimal rate = fetchUsdKrwRate(null, date);
+        BigDecimal krw = usdPrice.multiply(rate).setScale(0, java.math.RoundingMode.HALF_UP);
+        log.info("[Yahoo Finance] {} ${} × {}원 = {}원 ({})", ticker, usdPrice, rate.setScale(0, java.math.RoundingMode.HALF_UP), krw, date);
+        return krw;
+    }
+
+    @SuppressWarnings("unchecked")
+    private BigDecimal fetchYahooCurrentPrice(String ticker) {
+        try {
+            String url = "https://query2.finance.yahoo.com/v8/finance/chart/" + ticker + "?interval=1d&range=1d";
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("User-Agent", "Mozilla/5.0");
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                Map<String, Object> chart = (Map<String, Object>) response.getBody().get("chart");
+                List<Map<String, Object>> result = (List<Map<String, Object>>) chart.get("result");
+                if (result != null && !result.isEmpty()) {
+                    Object price = ((Map<String, Object>) result.get(0).get("meta")).get("regularMarketPrice");
+                    if (price != null) return new BigDecimal(price.toString());
+                }
+            }
+        } catch (Exception e) {
+            log.error("[Yahoo Finance] {} 현재가 조회 실패: {}", ticker, e.getMessage());
+        }
+        return BigDecimal.ZERO;
+    }
+
+    @SuppressWarnings("unchecked")
+    private BigDecimal fetchYahooPriceByDate(String ticker, String date) {
+        try {
+            long startTs = LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+            String url = "https://query2.finance.yahoo.com/v8/finance/chart/" + ticker
+                    + "?interval=1d&period1=" + startTs + "&period2=" + (startTs + 86400);
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("User-Agent", "Mozilla/5.0");
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                Map<String, Object> chart = (Map<String, Object>) response.getBody().get("chart");
+                List<Map<String, Object>> result = (List<Map<String, Object>>) chart.get("result");
+                if (result != null && !result.isEmpty()) {
+                    List<Object> close = (List<Object>) ((List<Map<String, Object>>)
+                            ((Map<String, Object>) result.get(0).get("indicators")).get("quote"))
+                            .get(0).get("close");
+                    if (close != null && !close.isEmpty() && close.get(0) != null)
+                        return new BigDecimal(close.get(0).toString());
+                }
+            }
+        } catch (Exception e) {
+            log.error("[Yahoo Finance] {} 날짜별 종가 조회 실패: {}", ticker, e.getMessage());
+        }
+        return BigDecimal.ZERO;
+    }
+
+    // range="1d" 이면 현재 환율, date가 있으면 해당 날짜 환율
+    @SuppressWarnings("unchecked")
+    private BigDecimal fetchUsdKrwRate(String range, String date) {
+        try {
+            String url;
+            if (date != null) {
+                long startTs = LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+                url = "https://query2.finance.yahoo.com/v8/finance/chart/USDKRW=X?interval=1d&period1=" + startTs + "&period2=" + (startTs + 86400);
+            } else {
+                url = "https://query2.finance.yahoo.com/v8/finance/chart/USDKRW=X?interval=1d&range=1d";
+            }
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("User-Agent", "Mozilla/5.0");
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                Map<String, Object> chart = (Map<String, Object>) response.getBody().get("chart");
+                List<Map<String, Object>> result = (List<Map<String, Object>>) chart.get("result");
+                if (result != null && !result.isEmpty()) {
+                    Object rate = ((Map<String, Object>) result.get(0).get("meta")).get("regularMarketPrice");
+                    if (rate != null) return new BigDecimal(rate.toString());
+                }
+            }
+        } catch (Exception e) {
+            log.error("[Yahoo Finance] 환율 조회 실패: {}", e.getMessage());
+        }
+        return new BigDecimal("1350"); // 조회 실패 시 기본값
     }
 }

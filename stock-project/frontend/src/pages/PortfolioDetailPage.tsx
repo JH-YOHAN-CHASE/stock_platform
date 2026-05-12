@@ -128,8 +128,8 @@ export default function PortfolioDetailPage() {
                     <td className={styles.ticker}>{item.ticker}</td>
                     <td>{item.stockName}</td>
                     <td className="mono">{item.quantity.toLocaleString()}</td>
-                    <td className="mono">{item.avgBuyPrice.toLocaleString()}</td>
-                    <td className="mono">{(item.quantity * item.avgBuyPrice).toLocaleString()}</td>
+                    <td className="mono">{item.avgBuyPrice.toLocaleString('ko-KR')} 원</td>
+                    <td className="mono">{(item.quantity * item.avgBuyPrice).toLocaleString('ko-KR')} 원</td>
                     <td>{item.weight != null ? `${item.weight}%` : '—'}</td>
                     <td className={styles.date}>{item.purchaseDate ?? '—'}</td>
                   </tr>

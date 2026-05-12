@@ -1,0 +1,19 @@
+# IDE
+.idea/
+*.iml
+
+# Gradle
+backend/.gradle/
+backend/build/
+backend/**/build/
+
+# Spring Boot - 실제 API 키가 담긴 설정 파일
+backend/application/src/main/resources/application.yml
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# OS
+.DS_Store
+Thumbs.db
