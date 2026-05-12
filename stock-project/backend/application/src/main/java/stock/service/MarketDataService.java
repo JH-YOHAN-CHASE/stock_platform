@@ -8,11 +8,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 @Slf4j
 @Service
@@ -59,15 +62,17 @@ public class MarketDataService {
     }
 
     public BigDecimal getClosingPriceByDate(String ticker, String date) {
-        String kisDate = date.replace("-", "");
-        log.info("[외부 API 호출] {} 종목 {} 날짜 종가를 요청합니다.", ticker, kisDate);
+        // 요청일로부터 최대 7일 전까지 범위로 조회 — 주말/공휴일이면 직전 거래일 종가 반환
+        String startKisDate = LocalDate.parse(date).minusDays(6).toString().replace("-", "");
+        String endKisDate = date.replace("-", "");
+        log.info("[외부 API 호출] {} 종목 {}~{} 범위 종가를 요청합니다.", ticker, startKisDate, endKisDate);
         try {
             String token = getAccessToken();
             String url = apiUrl + "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice"
                     + "?FID_COND_MRKT_DIV_CODE=J"
                     + "&FID_INPUT_ISCD=" + ticker
-                    + "&FID_INPUT_DATE_1=" + kisDate
-                    + "&FID_INPUT_DATE_2=" + kisDate
+                    + "&FID_INPUT_DATE_1=" + startKisDate
+                    + "&FID_INPUT_DATE_2=" + endKisDate
                     + "&FID_PERIOD_DIV_CODE=D"
                     + "&FID_ORG_ADJ_PRC=0";
 
@@ -82,12 +87,14 @@ public class MarketDataService {
 
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
                 List<Map<String, Object>> output2 = (List<Map<String, Object>>) response.getBody().get("output2");
-                if (output2 != null && !output2.isEmpty()) {
-                    String price = (String) output2.get(0).get("stck_clpr");
-                    if (price != null && !price.isBlank()) {
-                        BigDecimal result = new BigDecimal(price);
-                        log.info("[KIS API] {} {} 종가 조회 성공: {}원", ticker, kisDate, result);
-                        return result;
+                if (output2 != null) {
+                    for (Map<String, Object> row : output2) {
+                        String price = (String) row.get("stck_clpr");
+                        if (price != null && !price.isBlank() && !price.equals("0")) {
+                            BigDecimal result = new BigDecimal(price);
+                            log.info("[KIS API] {} 종가 조회 성공: {}원 ({})", ticker, result, row.get("stck_bsop_date"));
+                            return result;
+                        }
                     }
                 }
             }
@@ -180,10 +187,12 @@ public class MarketDataService {
 
     @SuppressWarnings("unchecked")
     private BigDecimal fetchYahooPriceByDate(String ticker, String date) {
+        // 요청일로부터 최대 7일 전까지 범위로 조회 — 주말/공휴일이면 직전 거래일 종가 반환
         try {
-            long startTs = LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+            long endTs = LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toEpochSecond() + 86400;
+            long startTs = LocalDate.parse(date).minusDays(6).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
             String url = "https://query2.finance.yahoo.com/v8/finance/chart/" + ticker
-                    + "?interval=1d&period1=" + startTs + "&period2=" + (startTs + 86400);
+                    + "?interval=1d&period1=" + startTs + "&period2=" + endTs;
             HttpHeaders headers = new HttpHeaders();
             headers.set("User-Agent", "Mozilla/5.0");
             ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
@@ -194,8 +203,13 @@ public class MarketDataService {
                     List<Object> close = (List<Object>) ((List<Map<String, Object>>)
                             ((Map<String, Object>) result.get(0).get("indicators")).get("quote"))
                             .get(0).get("close");
-                    if (close != null && !close.isEmpty() && close.get(0) != null)
-                        return new BigDecimal(close.get(0).toString());
+                    if (close != null) {
+                        // 가장 최근 거래일(마지막 non-null) 종가 반환
+                        for (int i = close.size() - 1; i >= 0; i--) {
+                            if (close.get(i) != null)
+                                return new BigDecimal(close.get(i).toString());
+                        }
+                    }
                 }
             }
         } catch (Exception e) {
@@ -204,14 +218,52 @@ public class MarketDataService {
         return BigDecimal.ZERO;
     }
 
-    // range="1d" 이면 현재 환율, date가 있으면 해당 날짜 환율
+    @SuppressWarnings("unchecked")
+    public TreeMap<YearMonth, Double> fetchMonthlyPrices(String yahooSymbol, LocalDate start, LocalDate end) {
+        TreeMap<YearMonth, Double> result = new TreeMap<>();
+        try {
+            long period1 = start.withDayOfMonth(1).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+            long period2 = end.withDayOfMonth(1).plusMonths(2).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+            String url = "https://query2.finance.yahoo.com/v8/finance/chart/" + yahooSymbol
+                    + "?interval=1mo&period1=" + period1 + "&period2=" + period2;
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("User-Agent", "Mozilla/5.0");
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                Map<String, Object> chart = (Map<String, Object>) response.getBody().get("chart");
+                List<Map<String, Object>> results = (List<Map<String, Object>>) chart.get("result");
+                if (results != null && !results.isEmpty()) {
+                    List<Object> timestamps = (List<Object>) results.get(0).get("timestamp");
+                    Map<String, Object> indicators = (Map<String, Object>) results.get(0).get("indicators");
+                    List<Map<String, Object>> quoteList = (List<Map<String, Object>>) indicators.get("quote");
+                    if (timestamps != null && quoteList != null && !quoteList.isEmpty()) {
+                        List<Object> closes = (List<Object>) quoteList.get(0).get("close");
+                        for (int i = 0; i < timestamps.size(); i++) {
+                            if (i < closes.size() && closes.get(i) != null) {
+                                long ts = ((Number) timestamps.get(i)).longValue();
+                                LocalDate date = Instant.ofEpochSecond(ts).atZone(ZoneOffset.UTC).toLocalDate();
+                                result.put(YearMonth.from(date), ((Number) closes.get(i)).doubleValue());
+                            }
+                        }
+                    }
+                }
+            }
+            log.info("[Yahoo Finance] {} 월별 데이터 {}개 로드", yahooSymbol, result.size());
+        } catch (Exception e) {
+            log.error("[Yahoo Finance] {} 월별 가격 조회 실패: {}", yahooSymbol, e.getMessage());
+        }
+        return result;
+    }
+
+    // date가 있으면 해당 날짜 환율(주말/공휴일이면 직전 거래일), 없으면 현재 환율
     @SuppressWarnings("unchecked")
     private BigDecimal fetchUsdKrwRate(String range, String date) {
         try {
             String url;
             if (date != null) {
-                long startTs = LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
-                url = "https://query2.finance.yahoo.com/v8/finance/chart/USDKRW=X?interval=1d&period1=" + startTs + "&period2=" + (startTs + 86400);
+                long endTs = LocalDate.parse(date).atStartOfDay(ZoneOffset.UTC).toEpochSecond() + 86400;
+                long startTs = LocalDate.parse(date).minusDays(6).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+                url = "https://query2.finance.yahoo.com/v8/finance/chart/USDKRW=X?interval=1d&period1=" + startTs + "&period2=" + endTs;
             } else {
                 url = "https://query2.finance.yahoo.com/v8/finance/chart/USDKRW=X?interval=1d&range=1d";
             }
@@ -222,8 +274,21 @@ public class MarketDataService {
                 Map<String, Object> chart = (Map<String, Object>) response.getBody().get("chart");
                 List<Map<String, Object>> result = (List<Map<String, Object>>) chart.get("result");
                 if (result != null && !result.isEmpty()) {
-                    Object rate = ((Map<String, Object>) result.get(0).get("meta")).get("regularMarketPrice");
-                    if (rate != null) return new BigDecimal(rate.toString());
+                    if (date != null) {
+                        // 날짜 지정 시 — 가장 최근 거래일 종가 사용
+                        List<Object> close = (List<Object>) ((List<Map<String, Object>>)
+                                ((Map<String, Object>) result.get(0).get("indicators")).get("quote"))
+                                .get(0).get("close");
+                        if (close != null) {
+                            for (int i = close.size() - 1; i >= 0; i--) {
+                                if (close.get(i) != null) return new BigDecimal(close.get(i).toString());
+                            }
+                        }
+                    } else {
+                        // 현재 환율
+                        Object rate = ((Map<String, Object>) result.get(0).get("meta")).get("regularMarketPrice");
+                        if (rate != null) return new BigDecimal(rate.toString());
+                    }
                 }
             }
         } catch (Exception e) {

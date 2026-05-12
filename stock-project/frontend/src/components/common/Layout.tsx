@@ -3,11 +3,12 @@ import { useAuthStore } from '../../store/authStore';
 import styles from './Layout.module.css';
 
 const NAV = [
-  { to: '/',                label: '대시보드',        icon: '◈' },
-  { to: '/portfolios',      label: '포트폴리오',       icon: '▦' },
-  { to: '/portfolios/compare', label: '포트폴리오 비교', icon: '⇄' },
-  { to: '/indexes',         label: '나만의 지수',      icon: '◉' },
-    { to: '/ai-experiment',   label: 'AI & 빅데이터 실험', icon: '🤖' },
+  { to: '/',                   label: '대시보드',           icon: '◈' },
+  { to: '/portfolios',         label: '포트폴리오',          icon: '▦' },
+  { to: '/backtest',           label: '백테스트',            icon: '◎' },
+  { to: '/portfolios/compare', label: '포트폴리오 비교',     icon: '⇄' },
+  { to: '/indexes',            label: '나만의 지수',         icon: '◉' },
+  { to: '/ai-experiment',      label: 'AI & 빅데이터 실험', icon: '🤖' },
 ];
 
 export default function Layout() {

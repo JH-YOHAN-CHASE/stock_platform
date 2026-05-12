@@ -40,6 +40,14 @@ public class MarketDataController {
             case US     -> marketDataService.getUsClosingPriceByDate(resolved.ticker(), date);
             default     -> BigDecimal.ZERO;
         };
+        // 날짜 데이터 없으면 (오늘 장 미마감 등) 현재가로 폴백
+        if (price.compareTo(BigDecimal.ZERO) == 0) {
+            price = switch (resolved.type()) {
+                case KOREAN -> marketDataService.getClosingPrice(resolved.ticker());
+                case US     -> marketDataService.getUsClosingPrice(resolved.ticker());
+                default     -> BigDecimal.ZERO;
+            };
+        }
         return ResponseEntity.ok(ApiResponse.ok(price));
     }
 }

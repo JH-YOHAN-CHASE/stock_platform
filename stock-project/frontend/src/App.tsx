@@ -13,7 +13,8 @@ import PortfolioFormPage from './pages/PortfolioFormPage';
 import IndexListPage from './pages/IndexListPage';
 import IndexDetailPage from './pages/IndexDetailPage';
 import IndexFormPage from './pages/IndexFormPage';
-import AiExperimentPage from './pages/AiExperimentPage'; // ✅ 새 페이지 추가
+import AiExperimentPage from './pages/AiExperimentPage';
+import BacktestPage from './pages/BacktestPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
     const { isAuthenticated, isLoading } = useAuthStore();
@@ -45,6 +46,7 @@ export default function App() {
                     <Route path="ai-experiment" element={<AiExperimentPage />} />
 
                     {/* 🔴 로그인해야만 접근 가능한 페이지 (PrivateRoute 적용) */}
+                    <Route path="backtest" element={<PrivateRoute><BacktestPage /></PrivateRoute>} />
                     <Route path="portfolios/new" element={<PrivateRoute><PortfolioFormPage /></PrivateRoute>} />
                     <Route path="portfolios/:id/edit" element={<PrivateRoute><PortfolioFormPage /></PrivateRoute>} />
                     <Route path="portfolios/compare" element={<PrivateRoute><PortfolioComparePage /></PrivateRoute>} />
