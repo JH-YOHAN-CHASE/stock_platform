@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
@@ -32,6 +33,7 @@ public class MarketDataService {
 
     private final RestTemplate restTemplate;
     private String cachedToken = null;
+    private final Map<String, String> companyNameCache = new ConcurrentHashMap<>();
 
     public MarketDataService() {
         this.restTemplate = new RestTemplate();
@@ -162,6 +164,36 @@ public class MarketDataService {
         BigDecimal krw = usdPrice.multiply(rate).setScale(0, java.math.RoundingMode.HALF_UP);
         log.info("[Yahoo Finance] {} ${} × {}원 = {}원 ({})", ticker, usdPrice, rate.setScale(0, java.math.RoundingMode.HALF_UP), krw, date);
         return krw;
+    }
+
+    @SuppressWarnings("unchecked")
+    public String fetchCompanyName(String ticker) {
+        return companyNameCache.computeIfAbsent(ticker.toUpperCase(), t -> {
+            try {
+                String url = "https://query2.finance.yahoo.com/v8/finance/chart/" + t + "?interval=1d&range=1d";
+                HttpHeaders headers = new HttpHeaders();
+                headers.set("User-Agent", "Mozilla/5.0");
+                ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
+                if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                    Map chart = (Map) response.getBody().get("chart");
+                    if (chart != null) {
+                        List<Map> result = (List<Map>) chart.get("result");
+                        if (result != null && !result.isEmpty()) {
+                            Map meta = (Map) result.get(0).get("meta");
+                            if (meta != null) {
+                                String shortName = (String) meta.get("shortName");
+                                if (shortName != null && !shortName.isBlank()) return shortName;
+                                String longName = (String) meta.get("longName");
+                                if (longName != null && !longName.isBlank()) return longName;
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("[Yahoo Finance] {} 회사명 조회 실패: {}", t, e.getMessage());
+            }
+            return null;
+        });
     }
 
     @SuppressWarnings("unchecked")

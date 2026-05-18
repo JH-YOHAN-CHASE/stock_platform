@@ -104,6 +104,10 @@ public class PortfolioDto {
         public void setCurrentPrice(BigDecimal currentPrice) {
             this.currentPrice = currentPrice;
         }
+
+        public void setStockName(String stockName) {
+            this.stockName = stockName;
+        }
     }
 
     @Getter

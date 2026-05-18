@@ -27,6 +27,7 @@ public class PortfolioService {
 
     // 외부 증권사 데이터를 캐싱하여 가져오는 서비스 주입
     private final MarketDataService marketDataService;
+    private final StockResolverService stockResolverService;
 
     // 내 포트폴리오 목록
     public List<PortfolioDto.SummaryResponse> getMyPortfolios(Long userId) {
@@ -50,9 +51,19 @@ public class PortfolioService {
         // 변환된 DTO의 각 종목(Item)에 증권사 API로부터 가져온 '현재가'를 세팅합니다.
         if (response.getItems() != null) {
             response.getItems().forEach(item -> {
-                BigDecimal currentPrice = marketDataService.getClosingPrice(item.getTicker());
-                // ※ 주의: PortfolioDto.ItemResponse 클래스 내부에 'currentPrice' 필드와 Setter가 있어야 합니다.
+                StockResolverService.ResolvedStock resolved = stockResolverService.resolve(item.getTicker());
+                BigDecimal currentPrice = switch (resolved.type()) {
+                    case KOREAN -> marketDataService.getClosingPrice(resolved.ticker());
+                    case US     -> marketDataService.getUsClosingPrice(resolved.ticker());
+                    default     -> BigDecimal.ZERO;
+                };
                 item.setCurrentPrice(currentPrice);
+
+                if (resolved.type() == StockResolverService.StockType.US
+                        && (item.getStockName() == null || item.getStockName().equalsIgnoreCase(item.getTicker()))) {
+                    String companyName = marketDataService.fetchCompanyName(resolved.ticker());
+                    if (companyName != null) item.setStockName(companyName);
+                }
             });
         }
 

@@ -10,7 +10,7 @@ spring:
   datasource:
     url: jdbc:mysql://localhost:3306/stock_db?useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
     username: root
-    password: knu74501@
+    password: password
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -59,6 +59,17 @@ jwt:
 
 frontend:
   host: http://localhost:3000
+
+kis:
+  api:
+    url: https://openapi.koreainvestment.com:9443
+    app-key: PSF4KRi1RK9dVGGPG8G65nDHGuWU2CmurFFF
+    app-secret: sXzIGGhFLX+AaKai7rPgRXKtroHyclHHZEq3HPtIiFXNolyzcKgcLJ/yeJmv8kMoSYlVcmwOW4CdcolDL35s3bzOEPPtPxSyu57xPru/U79u2HRhq5Wesh23O6qEq3teUErNkx7gEa5Nap34IhIgLczlR1/ZgmOlnmZzGrvWiWVEivyZ2No=
+
+gemini:
+  api:
+    key: AIzaSyA8u2r9Z3MqnzUchciDEgsX6840NMJ8zhQ
+    url: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
 
 logging:
   level:

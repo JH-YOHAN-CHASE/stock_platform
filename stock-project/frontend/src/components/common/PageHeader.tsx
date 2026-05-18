@@ -1,7 +1,7 @@
 import styles from './PageHeader.module.css';
 
 interface Props {
-  title: string;
+  title: React.ReactNode;
   subtitle?: string;
   action?: React.ReactNode;
 }

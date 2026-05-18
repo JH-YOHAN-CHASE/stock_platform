@@ -35,21 +35,45 @@ export default function PortfolioDetailPage() {
 
   const isOwner = user?.id === portfolio.userId;
 
-  // 파이차트 데이터 - weight 있으면 사용, 없으면 quantity 기반
-  const pieData = portfolio.items.map((item, i) => ({
-    name: item.ticker,
-    value: item.weight ?? item.quantity,
-    color: COLORS[i % COLORS.length],
-  }));
+  const isKorean = (ticker: string) => !/^[A-Za-z]{1,6}$/.test(ticker);
+  const displayName = (item: typeof portfolio.items[0]) =>
+    isKorean(item.ticker) ? item.stockName : `(${item.ticker}) ${item.stockName}`;
+
+  const evalPrice = (item: typeof portfolio.items[0]) =>
+    (item.currentPrice != null && item.currentPrice > 0) ? item.currentPrice : item.avgBuyPrice;
 
   const totalValue = portfolio.items.reduce(
-    (sum, item) => sum + item.quantity * item.avgBuyPrice, 0
+    (sum, item) => sum + item.quantity * evalPrice(item), 0
   );
+
+  const calcWeight = (item: typeof portfolio.items[0]) =>
+    totalValue > 0 ? (item.quantity * evalPrice(item)) / totalValue * 100 : 0;
+
+  const costBasis = portfolio.items.reduce((sum, item) => sum + item.quantity * item.avgBuyPrice, 0);
+  const returnRate = costBasis > 0 ? (totalValue - costBasis) / costBasis * 100 : 0;
+
+  const pieData = portfolio.items.map((item, i) => ({
+    name: displayName(item),
+    value: item.quantity * evalPrice(item),
+    color: COLORS[i % COLORS.length],
+  }));
 
   return (
     <div>
       <PageHeader
-        title={portfolio.name}
+        title={
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {portfolio.name}
+            <span style={{
+              fontSize: '0.7rem', fontWeight: 500,
+              color: portfolio.isPublic ? 'var(--green)' : 'var(--text2)',
+              border: '1px solid currentColor', borderRadius: 4,
+              padding: '2px 6px', whiteSpace: 'nowrap',
+            }}>
+              {portfolio.isPublic ? '공개' : '비공개'}
+            </span>
+          </span>
+        }
         subtitle={portfolio.description || ''}
         action={
           isOwner ? (
@@ -71,15 +95,15 @@ export default function PortfolioDetailPage() {
           <div className={styles.summaryValue}>{portfolio.items.length}<span className={styles.summaryUnit}>개</span></div>
         </Card>
         <Card>
-          <div className={styles.summaryLabel}>총 매수금액</div>
+          <div className={styles.summaryLabel}>총 평가금액</div>
           <div className={styles.summaryValue} style={{ fontSize: 20 }}>
             {totalValue.toLocaleString()}<span className={styles.summaryUnit}>원</span>
           </div>
         </Card>
         <Card>
-          <div className={styles.summaryLabel}>공개 여부</div>
-          <div className={styles.summaryValue} style={{ fontSize: 18, color: portfolio.isPublic ? 'var(--green)' : 'var(--text2)' }}>
-            {portfolio.isPublic ? '공개' : '비공개'}
+          <div className={styles.summaryLabel}>수익률</div>
+          <div className={styles.summaryValue} style={{ fontSize: 20, color: returnRate >= 0 ? 'var(--green)' : 'var(--red, #ef4444)' }}>
+            {returnRate >= 0 ? '+' : ''}{returnRate.toFixed(2)}<span className={styles.summaryUnit}>%</span>
           </div>
         </Card>
         <Card>
@@ -93,14 +117,24 @@ export default function PortfolioDetailPage() {
         {portfolio.items.length > 0 && (
           <Card className={styles.chartCard}>
             <h3 className={styles.chartTitle}>종목 구성</h3>
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={260}>
               <PieChart>
-                <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}>
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={80}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
+                  labelLine={true}
+                  fontSize={11}
+                >
                   {pieData.map((entry, i) => (
                     <Cell key={i} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(val: number) => [val, '비중/수량']} />
+                <Tooltip formatter={(val: number) => [val.toLocaleString('ko-KR') + ' 원', '평가금액']} />
               </PieChart>
             </ResponsiveContainer>
           </Card>
@@ -113,8 +147,7 @@ export default function PortfolioDetailPage() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>종목코드</th>
-                  <th>종목명</th>
+                  <th>종목</th>
                   <th>수량</th>
                   <th>평균단가</th>
                   <th>평가금액</th>
@@ -125,12 +158,15 @@ export default function PortfolioDetailPage() {
               <tbody>
                 {portfolio.items.map((item) => (
                   <tr key={item.id}>
-                    <td className={styles.ticker}>{item.ticker}</td>
-                    <td>{item.stockName}</td>
+                    <td>
+                      {isKorean(item.ticker)
+                        ? item.stockName
+                        : <><span className={styles.ticker}>({item.ticker})</span>{' '}{item.stockName}</>}
+                    </td>
                     <td className="mono">{item.quantity.toLocaleString()}</td>
                     <td className="mono">{item.avgBuyPrice.toLocaleString('ko-KR')} 원</td>
-                    <td className="mono">{(item.quantity * item.avgBuyPrice).toLocaleString('ko-KR')} 원</td>
-                    <td>{item.weight != null ? `${item.weight}%` : '—'}</td>
+                    <td className="mono">{(item.quantity * evalPrice(item)).toLocaleString('ko-KR')} 원</td>
+                    <td>{totalValue > 0 ? `${calcWeight(item).toFixed(2)}%` : '—'}</td>
                     <td className={styles.date}>{item.purchaseDate ?? '—'}</td>
                   </tr>
                 ))}
