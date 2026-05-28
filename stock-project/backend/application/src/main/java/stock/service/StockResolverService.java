@@ -1,10 +1,12 @@
 package stock.service;
 
-import tools.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
+// 💡 Spring Boot 4 표준 차세대 Jackson 패키지로 임포트합니다.
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.InputStream;
 import java.util.HashMap;
@@ -13,12 +15,15 @@ import java.util.Map;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class StockResolverService {
 
     private final Map<String, String> nameToCode = new HashMap<>();
     private final Map<String, String> codeToName = new HashMap<>();
     private final Map<String, String> usCodeToName = new HashMap<>();
-    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    // 💡 스프링 부트 4가 자동 생성한 tools.jackson 버전의 빈이 이곳으로 주입됩니다.
+    private final ObjectMapper objectMapper;
 
     public enum StockType { KOREAN, US, UNKNOWN }
 
@@ -27,6 +32,7 @@ public class StockResolverService {
     @PostConstruct
     @SuppressWarnings("unchecked")
     public void loadStocks() {
+        // 1. 국내 주식 로드
         try {
             InputStream is = new ClassPathResource("stocks.json").getInputStream();
             List<Map<String, String>> stocks = objectMapper.readValue(is,
@@ -39,11 +45,12 @@ public class StockResolverService {
                 nameToCode.put(code, code);
                 if (ko != null) codeToName.put(code, ko);
             }
-            log.info("[StockResolver] 종목 {}개 로드 완료", stocks.size());
+            log.info("[StockResolver] 국내 종목 {}개 로드 완료", stocks.size());
         } catch (Exception e) {
             log.error("[StockResolver] stocks.json 로드 실패: {}", e.getMessage());
         }
 
+        // 2. 미국 주식 로드
         try {
             InputStream usIs = new ClassPathResource("us_stocks.json").getInputStream();
             List<Map<String, String>> usStocks = objectMapper.readValue(usIs,
@@ -60,26 +67,31 @@ public class StockResolverService {
     }
 
     public String getName(String code) {
+        if (code == null) return null;
         String upper = code.toUpperCase().trim();
+
+        if (upper.contains(".")) {
+            upper = upper.split("\\.")[0];
+        }
+
         String korean = codeToName.get(upper);
         if (korean != null) return korean;
         return usCodeToName.get(upper);
     }
 
     public ResolvedStock resolve(String query) {
+        if (query == null) return new ResolvedStock("", StockType.UNKNOWN);
         String upper = query.toUpperCase().trim();
 
-        // 6자리 숫자 → 한국 주식 코드
-        if (upper.matches("\\d{6}")) {
-            return new ResolvedStock(upper, StockType.KOREAN);
+        if (upper.matches("\\d{6}(\\.(KS|KQ))?")) {
+            String cleanTicker = upper.contains(".") ? upper.split("\\.")[0] : upper;
+            return new ResolvedStock(cleanTicker, StockType.KOREAN);
         }
 
-        // 이름 맵에 있는 경우 → 한국 주식
         if (nameToCode.containsKey(upper)) {
             return new ResolvedStock(nameToCode.get(upper), StockType.KOREAN);
         }
 
-        // 영어 알파벳 1~6자 → 미국 주식 티커
         if (upper.matches("[A-Z]{1,6}")) {
             return new ResolvedStock(upper, StockType.US);
         }
