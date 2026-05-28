@@ -1,6 +1,5 @@
 package stock.service;
 
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,7 +11,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import stock.dto.AiSimulationResponseDto;
 import stock.dto.PortfolioDto;
-import stock.dto.CustomIndexDto; // 💡 CustomIndexDto 임포트 추가
+import stock.dto.CustomIndexDto;
+import tools.jackson.databind.JsonNode; //
 import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 public class AiAnalysisService {
 
     private final PortfolioService portfolioService;
-    private final CustomIndexService customIndexService; // 💡 사용자가 만든 지수 정보를 가져오기 위해 추가
+    private final CustomIndexService customIndexService;
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate = new RestTemplate();
 
@@ -51,7 +51,7 @@ public class AiAnalysisService {
                 .map(i -> i.getCurrentPrice().multiply(new BigDecimal(i.getQuantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // 2. 💡 지수(Index) 구성 지표들 가져오기 (환율, 금리 등)
+        // 2. 지수(Index) 구성 지표들 가져오기
         CustomIndexDto.Response indexData = customIndexService.getIndex(indexId, userId);
 
         String indexDetails = indexData.getComponents().stream()
@@ -59,17 +59,17 @@ public class AiAnalysisService {
                         c.getIndicatorName(), c.getDirection(), c.getWeight()))
                 .collect(Collectors.joining("\n"));
 
-        // 3. 💡 레이더 차트의 축(Subject)을 사용자가 만든 지표 이름으로 동적 생성
+        // 3. 레이더 차트의 축 동적 생성
         String radarLabels = indexData.getComponents().stream()
                 .map(c -> String.format("    { \"subject\": \"%s\", \"portfolio\": 80, \"index_avg\": 50 }", c.getIndicatorName()))
                 .collect(Collectors.joining(",\n"));
 
-        // 4. 💡 AI에게 '종목 정보'와 '지수 정보'를 모두 포함하여 똑똑하게 묻기
+        // 4. 프롬프트 생성
         String prompt = String.format(
-                "너는 대한민국 주식 시장 전문 퀀트 투자 AI야. 아래 내 포트폴리오와 내가 예상하는 거시경제 지수(시나리오)를 결합하여 분석해줘.\n\n" +
+                "너는 주식 시장 전문 퀀트 투자 AI야. 아래 내 포트폴리오와 내가 만든 거시경제지표와 커스텀지표의 조합인 지수(시나리오)를 결합하여 분석해줘.\n\n" +
                         "[1. 분석 대상 포트폴리오 (총액: %s원)]\n%s\n\n" +
-                        "[2. 사용자가 설정한 거시경제 지수 시나리오]\n%s\n\n" +
-                        "위의 지수 시나리오(예: 환율 하락, 금리 인상 등)가 발생했을 때 이 포트폴리오 종목들이 어떻게 반응할지 상관관계를 분석해야 해.\n\n" +
+                        "[2. 사용자가 설정한 지수 시나리오]\n%s\n\n" +
+                        "위의 지수 시나리오(환율 하락, 금리 인상,커스텀 지표 등)가 발생했을 때 이 포트폴리오 종목들이 어떻게 반응할지 상관관계를 분석해야 해.\n\n" +
                         "반드시 아래 형태의 순수 JSON으로만 대답해. ```json 같은 마크다운은 절대 쓰지마.\n" +
                         "{\n" +
                         "  \"performance\": { \"return\": 15.5, \"drawdown\": -4.2, \"score\": 8.5 },\n" +
@@ -89,7 +89,6 @@ public class AiAnalysisService {
         String jsonResponse = callGeminiApi(prompt);
 
         try {
-            // Gemini가 준 JSON 텍스트를 자바 객체(AiSimulationResponseDto)로 완벽 변환
             return objectMapper.readValue(jsonResponse, AiSimulationResponseDto.class);
         } catch (Exception e) {
             log.error("JSON 파싱 실패 (AI가 JSON 형식을 어김): {}", jsonResponse, e);
@@ -110,15 +109,28 @@ public class AiAnalysisService {
         );
 
         try {
-            Map<String, Object> response = restTemplate.postForObject(url, new HttpEntity<>(requestBody, headers), Map.class);
-            if (response != null && response.containsKey("candidates")) {
-                List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.get("candidates");
-                Map<String, Object> content = (Map<String, Object>) candidates.get(0).get("content");
-                List<Map<String, Object>> parts = (List<Map<String, Object>>) content.get("parts");
-                String rawText = (String) parts.get(0).get("text");
+            // 💡 [개선] 1. Map 객체를 tools.jackson을 이용해 명시적으로 JSON 문자열로 직렬화
+            String jsonRequestBody = objectMapper.writeValueAsString(requestBody);
 
-                // 마크다운 백틱(```json) 제거 처리
-                return rawText.replaceAll("```json", "").replaceAll("```", "").trim();
+            // 💡 [개선] 2. RestTemplate의 응답을 String으로 받아 Jackson 충돌을 방지
+            String responseString = restTemplate.postForObject(url, new HttpEntity<>(jsonRequestBody, headers), String.class);
+
+            if (responseString != null) {
+                // 💡 [개선] 3. 무분별한 Map 캐스팅 대신 JsonNode를 활용하여 우아하고 안전하게 트리 탐색
+                JsonNode rootNode = objectMapper.readTree(responseString);
+                JsonNode candidatesNode = rootNode.path("candidates");
+
+                if (candidatesNode.isArray() && !candidatesNode.isEmpty()) {
+                    String rawText = candidatesNode.get(0)
+                            .path("content")
+                            .path("parts")
+                            .get(0)
+                            .path("text")
+                            .asText();
+
+                    // 마크다운 백틱(```json) 제거 처리
+                    return rawText.replaceAll("```json", "").replaceAll("```", "").trim();
+                }
             }
         } catch (Exception e) {
             log.error("[Gemini API] 통신 실패: {}", e.getMessage());
