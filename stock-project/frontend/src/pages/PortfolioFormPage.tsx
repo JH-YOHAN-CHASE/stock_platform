@@ -77,9 +77,27 @@ export default function PortfolioFormPage() {
     const fetchAndFillPrice = async (idx: number, ticker: string, date: string) => {
         setPriceLoading(prev => { const n = [...prev]; n[idx] = true; return n; });
         try {
+            // ticker 코드 resolve + 종목명 자동완성
+            let resolvedTicker = ticker;
+            try {
+                const resolved = await marketApi.resolveStock(ticker);
+                resolvedTicker = resolved.ticker;
+                setForm((prev) => {
+                    const items = [...prev.items];
+                    const cur = items[idx];
+                    const nameIsEmpty = !cur.stockName || cur.stockName.toUpperCase() === ticker.toUpperCase();
+                    items[idx] = {
+                        ...cur,
+                        ticker: resolved.ticker,
+                        ...(nameIsEmpty ? { stockName: resolved.name } : {}),
+                    };
+                    return { ...prev, items };
+                });
+            } catch { /* resolve 실패 시 원래 ticker 사용 */ }
+
             const price = date
-                ? await marketApi.getStockPriceByDate(ticker, date)
-                : await marketApi.getStockPrice(ticker);
+                ? await marketApi.getStockPriceByDate(resolvedTicker, date)
+                : await marketApi.getStockPrice(resolvedTicker);
             if (price > 0) {
                 setForm((prev) => {
                     let items = [...prev.items];
@@ -95,12 +113,12 @@ export default function PortfolioFormPage() {
         }
     };
 
-    // 종목 검색 필드 변경 — ticker/stockName을 동일값으로 설정 후 가격 자동 조회
+    // 종목 검색 필드 변경 — ticker만 설정 후 가격 자동 조회 (stockName은 별도 입력)
     const handleSearchChange = (idx: number, value: string) => {
         const upper = value.toUpperCase();
         setForm((prev) => {
             const items = [...prev.items];
-            items[idx] = { ...items[idx], ticker: upper, stockName: upper };
+            items[idx] = { ...items[idx], ticker: upper };
             return { ...prev, items };
         });
 
@@ -208,13 +226,22 @@ export default function PortfolioFormPage() {
                                 )}
                             </div>
                             <div className={styles.itemGrid}>
-                                <div className={styles.field} style={{ gridColumn: 'span 2' }}>
+                                <div className={styles.field}>
                                     <label>종목코드 *</label>
                                     <input
                                         className={styles.input}
                                         value={item.ticker}
                                         onChange={(e) => handleSearchChange(idx, e.target.value)}
-                                        placeholder="예: 005930 (4자 이상 입력 시 가격 자동 조회)"
+                                        placeholder="예: 005930 또는 삼성전자"
+                                    />
+                                </div>
+                                <div className={styles.field}>
+                                    <label>종목명 *</label>
+                                    <input
+                                        className={styles.input}
+                                        value={item.stockName}
+                                        onChange={(e) => setItem(idx, 'stockName', e.target.value)}
+                                        placeholder="예: 삼성전자"
                                     />
                                 </div>
                                 <div className={styles.field}>

@@ -10,6 +10,7 @@ import stock.service.StockResolverService.ResolvedStock;
 import stock.service.StockResolverService.StockType;
 
 import java.math.BigDecimal;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/market")
@@ -18,6 +19,20 @@ public class MarketDataController {
 
     private final MarketDataService marketDataService;
     private final StockResolverService stockResolver;
+
+    @GetMapping("/resolve")
+    public ResponseEntity<ApiResponse<Map<String, String>>> resolveStock(@RequestParam String query) {
+        StockResolverService.ResolvedStock resolved = stockResolver.resolve(query);
+        String name = stockResolver.getName(resolved.ticker());
+        if (name == null && resolved.type() == StockType.US) {
+            name = marketDataService.fetchCompanyName(resolved.ticker());
+        }
+        return ResponseEntity.ok(ApiResponse.ok(Map.of(
+                "ticker", resolved.ticker(),
+                "name", name != null ? name : resolved.ticker(),
+                "type", resolved.type().name()
+        )));
+    }
 
     @GetMapping("/price")
     public ResponseEntity<ApiResponse<BigDecimal>> getCurrentPrice(@RequestParam String ticker) {

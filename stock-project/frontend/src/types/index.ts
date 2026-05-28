@@ -14,6 +14,7 @@ export interface PortfolioItem {
   stockName: string;
   quantity: number;
   avgBuyPrice: number;
+  currentPrice?: number;
   purchaseDate: string;
   weight: number | null;
 }

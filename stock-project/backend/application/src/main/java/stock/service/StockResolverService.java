@@ -16,6 +16,8 @@ import java.util.Map;
 public class StockResolverService {
 
     private final Map<String, String> nameToCode = new HashMap<>();
+    private final Map<String, String> codeToName = new HashMap<>();
+    private final Map<String, String> usCodeToName = new HashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public enum StockType { KOREAN, US, UNKNOWN }
@@ -31,14 +33,37 @@ public class StockResolverService {
                     objectMapper.getTypeFactory().constructCollectionType(List.class, Map.class));
             for (Map<String, String> stock : stocks) {
                 String code = stock.get("code");
-                if (stock.get("ko") != null) nameToCode.put(stock.get("ko").toUpperCase(), code);
+                String ko = stock.get("ko");
+                if (ko != null) nameToCode.put(ko.toUpperCase(), code);
                 if (stock.get("en") != null) nameToCode.put(stock.get("en").toUpperCase(), code);
                 nameToCode.put(code, code);
+                if (ko != null) codeToName.put(code, ko);
             }
             log.info("[StockResolver] 종목 {}개 로드 완료", stocks.size());
         } catch (Exception e) {
             log.error("[StockResolver] stocks.json 로드 실패: {}", e.getMessage());
         }
+
+        try {
+            InputStream usIs = new ClassPathResource("us_stocks.json").getInputStream();
+            List<Map<String, String>> usStocks = objectMapper.readValue(usIs,
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, Map.class));
+            for (Map<String, String> stock : usStocks) {
+                String ticker = stock.get("ticker");
+                String name = stock.get("name");
+                if (ticker != null && name != null) usCodeToName.put(ticker.toUpperCase(), name);
+            }
+            log.info("[StockResolver] 미국 종목 {}개 로드 완료", usStocks.size());
+        } catch (Exception e) {
+            log.error("[StockResolver] us_stocks.json 로드 실패: {}", e.getMessage());
+        }
+    }
+
+    public String getName(String code) {
+        String upper = code.toUpperCase().trim();
+        String korean = codeToName.get(upper);
+        if (korean != null) return korean;
+        return usCodeToName.get(upper);
     }
 
     public ResolvedStock resolve(String query) {
