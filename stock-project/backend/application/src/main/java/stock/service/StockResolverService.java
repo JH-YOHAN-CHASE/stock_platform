@@ -30,7 +30,7 @@ public class StockResolverService {
     public record ResolvedStock(String ticker, StockType type) {}
 
     @PostConstruct
-    @SuppressWarnings("unchecked")
+    //@SuppressWarnings("unchecked")경고 필요없ㅇ
     public void loadStocks() {
         // 1. 국내 주식 로드
         try {
