@@ -11,6 +11,7 @@ import java.util.List;
 @RequestMapping("/api/chat")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
+@SuppressWarnings("NullableProblems")
 public class ChatRestController {
 
     private final ChatService chatService;
