@@ -46,8 +46,9 @@ public class SecurityConfig {
                 .requestMatchers("/login/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/portfolios/public").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/indexes/public").permitAll()
-                    .requestMatchers("/api/ai/**").permitAll()
-                .anyRequest().authenticated()
+                        .requestMatchers("/api/ai/**").permitAll()
+                        .requestMatchers("/ws-chat/**").permitAll()
+                        .anyRequest().authenticated()
             )
             .oauth2Login(oauth2 -> oauth2
                 .userInfoEndpoint(endpoint -> endpoint

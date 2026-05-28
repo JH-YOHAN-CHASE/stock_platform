@@ -6,10 +6,9 @@ import org.springframework.web.bind.annotation.*;
 import stock.dto.ApiResponse;
 import stock.service.MarketDataService;
 import stock.service.StockResolverService;
-import stock.service.StockResolverService.ResolvedStock;
-import stock.service.StockResolverService.StockType;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -20,13 +19,20 @@ public class MarketDataController {
     private final MarketDataService marketDataService;
     private final StockResolverService stockResolver;
 
+    @GetMapping("/search")
+    public ResponseEntity<ApiResponse<List<Map<String, String>>>> searchStocks(@RequestParam String query) {
+        return ResponseEntity.ok(ApiResponse.ok(stockResolver.search(query, 10)));
+    }
+
     @GetMapping("/resolve")
     public ResponseEntity<ApiResponse<Map<String, String>>> resolveStock(@RequestParam String query) {
         StockResolverService.ResolvedStock resolved = stockResolver.resolve(query);
         String name = stockResolver.getName(resolved.ticker());
-        if (name == null && resolved.type() == StockType.US) {
+
+        if (name == null) {
             name = marketDataService.fetchCompanyName(resolved.ticker());
         }
+
         return ResponseEntity.ok(ApiResponse.ok(Map.of(
                 "ticker", resolved.ticker(),
                 "name", name != null ? name : resolved.ticker(),
@@ -36,12 +42,17 @@ public class MarketDataController {
 
     @GetMapping("/price")
     public ResponseEntity<ApiResponse<BigDecimal>> getCurrentPrice(@RequestParam String ticker) {
-        ResolvedStock resolved = stockResolver.resolve(ticker);
-        BigDecimal price = switch (resolved.type()) {
-            case KOREAN -> marketDataService.getClosingPrice(resolved.ticker());
-            case US     -> marketDataService.getUsClosingPrice(resolved.ticker());
-            default     -> BigDecimal.ZERO;
-        };
+        BigDecimal price = marketDataService.getClosingPrice(ticker);
+        return ResponseEntity.ok(ApiResponse.ok(price));
+    }
+
+    @GetMapping("/price/raw")
+    public ResponseEntity<ApiResponse<BigDecimal>> getRawPrice(
+            @RequestParam String ticker,
+            @RequestParam(required = false) String date) {
+        BigDecimal price = date != null
+                ? marketDataService.getRawPriceByDate(ticker, date)
+                : marketDataService.getRawPrice(ticker);
         return ResponseEntity.ok(ApiResponse.ok(price));
     }
 
@@ -49,20 +60,8 @@ public class MarketDataController {
     public ResponseEntity<ApiResponse<BigDecimal>> getHistoricalPrice(
             @RequestParam String ticker,
             @RequestParam String date) {
-        ResolvedStock resolved = stockResolver.resolve(ticker);
-        BigDecimal price = switch (resolved.type()) {
-            case KOREAN -> marketDataService.getClosingPriceByDate(resolved.ticker(), date);
-            case US     -> marketDataService.getUsClosingPriceByDate(resolved.ticker(), date);
-            default     -> BigDecimal.ZERO;
-        };
-        // 날짜 데이터 없으면 (오늘 장 미마감 등) 현재가로 폴백
-        if (price.compareTo(BigDecimal.ZERO) == 0) {
-            price = switch (resolved.type()) {
-                case KOREAN -> marketDataService.getClosingPrice(resolved.ticker());
-                case US     -> marketDataService.getUsClosingPrice(resolved.ticker());
-                default     -> BigDecimal.ZERO;
-            };
-        }
+        // [수정] 서비스가 내부적으로 '해당 날짜' 또는 '그 직전 가장 최신 영업일'의 종가를 알아서 찾아옵니다.
+        BigDecimal price = marketDataService.getClosingPriceByDate(ticker, date);
         return ResponseEntity.ok(ApiResponse.ok(price));
     }
 }

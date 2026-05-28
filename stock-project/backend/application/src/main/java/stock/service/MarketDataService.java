@@ -246,6 +246,16 @@ public class MarketDataService {
         return result;
     }
 
+    public BigDecimal getRawPrice(String ticker) {
+        String symbol = convertToYahooSymbol(ticker);
+        return fetchYahooCurrentPrice(symbol);
+    }
+
+    public BigDecimal getRawPriceByDate(String ticker, String date) {
+        String symbol = convertToYahooSymbol(ticker);
+        return fetchYahooPriceByDate(symbol, date);
+    }
+
     @SuppressWarnings("unchecked")
     private BigDecimal fetchUsdKrwRate(String dateStr) {
         try {
