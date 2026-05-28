@@ -15,6 +15,8 @@ import IndexDetailPage from './pages/IndexDetailPage';
 import IndexFormPage from './pages/IndexFormPage';
 import AiExperimentPage from './pages/AiExperimentPage';
 import BacktestPage from './pages/BacktestPage';
+// 💡 채팅 페이지 임포트 추가
+import ChatPage from './pages/ChatPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
     const { isAuthenticated, isLoading } = useAuthStore();
@@ -52,6 +54,7 @@ export default function App() {
                     <Route path="portfolios/compare" element={<PrivateRoute><PortfolioComparePage /></PrivateRoute>} />
                     <Route path="indexes/new" element={<PrivateRoute><IndexFormPage /></PrivateRoute>} />
                     <Route path="indexes/:id/edit" element={<PrivateRoute><IndexFormPage /></PrivateRoute>} />
+                    <Route path="chat" element={<PrivateRoute><ChatPage /></PrivateRoute>} />
                 </Route>
             </Routes>
         </BrowserRouter>
