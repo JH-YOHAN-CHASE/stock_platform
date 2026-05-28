@@ -13,7 +13,6 @@ import stock.repository.PortfolioRepository;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.*;
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -65,11 +64,23 @@ public class BacktestService {
         TreeMap<YearMonth, Double> sp500Prices = marketDataService.fetchMonthlyPrices("^GSPC", startDate, endDate);
 
         List<YearMonth> months = buildMonthRange(startDate, endDate);
+
+        // 가격 빈자리 채우기
         for (TreeMap<YearMonth, Double> ph : priceHistory) forwardFill(ph, months);
         forwardFill(kospiPrices, months);
         forwardFill(sp500Prices, months);
 
+        // 1. 내 포트폴리오 시뮬레이션 실행
         List<Double> portfolioValues = simulate(priceHistory, weights, months, initialInvestment, rebalancing, monthlyAddition);
+
+        /*
+         * 💡 [수정 구간] 벤치마크 지수 시뮬레이션 도입
+         * - 수정 이유: 기존의 수동 누적 원금 계산 방식은 월 적립금 투입 시점의 지수 반영이 수학적으로 왜곡되어 차트 괴리가 발생함.
+         * - 해결 방법: 코스피와 S&P500을 '비중 100%짜리 단일 종목 포트폴리오'로 가정하고, 검증된 자산 배분 시뮬레이터(simulate)에 통째로 통과시킴.
+         * - 결과: 사용자의 자산과 완벽하게 동일한 조건(초기 자금, 월 적립금, 투자 기간)으로 지수가 굴러가므로 차트 스케일이 완벽히 일치하게 됨.
+         */
+        List<Double> kospiValues = simulate(Collections.singletonList(kospiPrices), new double[]{1.0}, months, initialInvestment, "NONE", monthlyAddition);
+        List<Double> sp500Values = simulate(Collections.singletonList(sp500Prices), new double[]{1.0}, months, initialInvestment, "NONE", monthlyAddition);
 
         double finalValue = portfolioValues.isEmpty() ? initialInvestment : portfolioValues.get(portfolioValues.size() - 1);
         long totalInvested = initialInvestment + monthlyAddition * Math.max(0, months.size() - 1);
@@ -89,7 +100,8 @@ public class BacktestService {
         );
 
         return BacktestResponseDto.Response.builder()
-                .chartData(buildChartData(months, portfolioValues, kospiPrices, sp500Prices, initialInvestment))
+                // 💡 [수정] 수동 계산 수식 대신, 엔진이 계산한 리스트(kospiValues, sp500Values)를 인자로 깔끔하게 전달
+                .chartData(buildChartData(months, portfolioValues, kospiValues, sp500Values))
                 .metrics(metrics)
                 .yearlyReturns(calcYearlyReturns(months, portfolioValues, kospiPrices, sp500Prices))
                 .build();
@@ -117,84 +129,94 @@ public class BacktestService {
     }
 
     private void forwardFill(TreeMap<YearMonth, Double> prices, List<YearMonth> months) {
-        Double last = null;
+        if (prices.isEmpty()) return;
+        Double last = prices.firstEntry().getValue();
         for (YearMonth m : months) {
-            if (prices.containsKey(m)) last = prices.get(m);
-            else if (last != null) prices.put(m, last);
+            if (prices.containsKey(m)) {
+                last = prices.get(m);
+            } else {
+                prices.put(m, last);
+            }
         }
     }
 
     private List<Double> simulate(List<TreeMap<YearMonth, Double>> priceHistory, double[] weights,
-                                   List<YearMonth> months, long initialInvestment, String rebalancing, long monthlyAddition) {
+                                  List<YearMonth> months, long initialInvestment, String rebalancing, long monthlyAddition) {
         List<Double> values = new ArrayList<>();
         int n = priceHistory.size();
-        double[] refAlloc = new double[n];
-        double[] refPrices = new double[n];
+        double[] currentSharesVal = new double[n];
+        double[] lastPrices = new double[n];
 
+        // 1개월 차 (초기 투자)
         YearMonth startMonth = months.get(0);
         for (int i = 0; i < n; i++) {
-            refAlloc[i] = initialInvestment * weights[i];
-            refPrices[i] = priceHistory.get(i).getOrDefault(startMonth, 0.0);
+            currentSharesVal[i] = initialInvestment * weights[i];
+            lastPrices[i] = priceHistory.get(i).getOrDefault(startMonth, 0.0);
         }
+        values.add((double) initialInvestment);
 
-        for (int mi = 0; mi < months.size(); mi++) {
+        // 2개월 차부터 시뮬레이션
+        for (int mi = 1; mi < months.size(); mi++) {
             YearMonth m = months.get(mi);
+            double currentTotal = 0;
+            double[] curPrices = new double[n];
 
-            if (mi > 0) {
-                double[] curPrices = new double[n];
-                for (int i = 0; i < n; i++)
-                    curPrices[i] = priceHistory.get(i).getOrDefault(m, refPrices[i]);
-
-                // 리밸런싱
-                int mv = m.getMonthValue();
-                boolean rebal = "QUARTERLY".equals(rebalancing) && (mv == 1 || mv == 4 || mv == 7 || mv == 10);
-                rebal = rebal || ("ANNUALLY".equals(rebalancing) && mv == 1);
-
-                if (rebal) {
-                    double cur = 0;
-                    for (int i = 0; i < n; i++)
-                        cur += refPrices[i] > 0 ? refAlloc[i] * curPrices[i] / refPrices[i] : refAlloc[i];
-                    for (int i = 0; i < n; i++) {
-                        refAlloc[i] = cur * weights[i];
-                        refPrices[i] = curPrices[i];
-                    }
-                }
-
-                // 월 적립 — 현재 가격에 목표 비중대로 추가 매수
-                if (monthlyAddition > 0) {
-                    for (int i = 0; i < n; i++) {
-                        double curVal = refPrices[i] > 0 ? refAlloc[i] * curPrices[i] / refPrices[i] : refAlloc[i];
-                        refAlloc[i] = curVal + monthlyAddition * weights[i];
-                        refPrices[i] = curPrices[i];
-                    }
-                }
-            }
-
-            double total = 0;
+            // 1. 가격 변동 적용
             for (int i = 0; i < n; i++) {
-                double p = priceHistory.get(i).getOrDefault(m, refPrices[i]);
-                total += refPrices[i] > 0 ? refAlloc[i] * p / refPrices[i] : refAlloc[i];
+                curPrices[i] = priceHistory.get(i).getOrDefault(m, lastPrices[i]);
+                if (lastPrices[i] > 0 && curPrices[i] > 0) {
+                    currentSharesVal[i] = currentSharesVal[i] * (curPrices[i] / lastPrices[i]);
+                }
+                currentTotal += currentSharesVal[i];
             }
-            values.add(total);
+
+            // 2. 월 적립금 추가
+            if (monthlyAddition > 0) {
+                for (int i = 0; i < n; i++) {
+                    currentSharesVal[i] += monthlyAddition * weights[i];
+                }
+                currentTotal += monthlyAddition;
+            }
+
+            // 3. 리밸런싱 트리거 검사 및 실행
+            int mv = m.getMonthValue();
+            boolean rebal = "QUARTERLY".equals(rebalancing) && (mv == 1 || mv == 4 || mv == 7 || mv == 10);
+            rebal = rebal || ("ANNUALLY".equals(rebalancing) && mv == 1);
+
+            if (rebal) {
+                for (int i = 0; i < n; i++) {
+                    currentSharesVal[i] = currentTotal * weights[i];
+                }
+            }
+
+            // 4. 다음 달을 위해 현재 가격 저장
+            for (int i = 0; i < n; i++) {
+                lastPrices[i] = curPrices[i];
+            }
+
+            values.add(currentTotal);
         }
         return values;
     }
 
-    private List<BacktestResponseDto.ChartPoint> buildChartData(List<YearMonth> months, List<Double> portfolioValues,
-            TreeMap<YearMonth, Double> kospiPrices, TreeMap<YearMonth, Double> sp500Prices, long initialInvestment) {
+    /*
+     * 💡 [수정 구간] buildChartData 매개변수 및 매핑 로직 단순화
+     * - 수정 이유: 더 이상 복잡하고 버그가 일어나기 쉬운 '지수 가치 환산 수식'을 이 안에서 계산할 필요가 없어짐.
+     * - 결과: 계산이 완료된 리스트를 가져와서 `Math.round()` 처리 후 데이터 포인트에 꽂아주기만 하면 끝남.
+     * 가독성이 극대화되고 연산 속도가 빨라짐.
+     */
+    private List<BacktestResponseDto.ChartPoint> buildChartData(List<YearMonth> months,
+                                                                List<Double> portfolioValues,
+                                                                List<Double> kospiValues,
+                                                                List<Double> sp500Values) {
         List<BacktestResponseDto.ChartPoint> chart = new ArrayList<>();
-        Double kospiStart = kospiPrices.get(months.get(0));
-        Double sp500Start = sp500Prices.get(months.get(0));
 
         for (int i = 0; i < months.size(); i++) {
             YearMonth m = months.get(i);
             long pv = Math.round(portfolioValues.get(i));
-            Double kp = kospiPrices.get(m);
-            long kv = (kospiStart != null && kospiStart > 0 && kp != null)
-                    ? Math.round(initialInvestment * kp / kospiStart) : 0;
-            Double sp = sp500Prices.get(m);
-            long sv = (sp500Start != null && sp500Start > 0 && sp != null)
-                    ? Math.round(initialInvestment * sp / sp500Start) : 0;
+            long kv = Math.round(kospiValues.get(i));
+            long sv = Math.round(sp500Values.get(i));
+
             chart.add(new BacktestResponseDto.ChartPoint(m.toString(), pv, kv, sv));
         }
         return chart;
@@ -232,7 +254,7 @@ public class BacktestService {
     }
 
     private List<BacktestResponseDto.YearlyReturn> calcYearlyReturns(List<YearMonth> months, List<Double> portfolioValues,
-            TreeMap<YearMonth, Double> kospiPrices, TreeMap<YearMonth, Double> sp500Prices) {
+                                                                     TreeMap<YearMonth, Double> kospiPrices, TreeMap<YearMonth, Double> sp500Prices) {
         List<BacktestResponseDto.YearlyReturn> result = new ArrayList<>();
         Map<Integer, List<Integer>> byYear = new LinkedHashMap<>();
         for (int i = 0; i < months.size(); i++)
