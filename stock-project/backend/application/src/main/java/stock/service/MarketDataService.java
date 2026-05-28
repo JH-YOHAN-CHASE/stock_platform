@@ -18,7 +18,6 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
-
 @Slf4j
 @Service
 public class MarketDataService {
@@ -26,7 +25,6 @@ public class MarketDataService {
     @Value("${yahoo.api.url}")
     private String baseUrl;
 
-    // 💡 RestClient 단일 풀로 깔끔하게 통합 관리
     private final RestClient restClient;
     private final Map<String, String> companyNameCache = new ConcurrentHashMap<>();
 
@@ -73,7 +71,13 @@ public class MarketDataService {
     // ==========================================
     // 2. 특정 날짜 과거 종가 조회 (국내/해외 통합)
     // ==========================================
-    @Cacheable(value = "historicalPrices", key = "#ticker + '-' + #date", unless = "#result == null || #result.compareTo(java.math.BigDecimal.ZERO) == 0")
+    /*
+     * [디버깅 구간] Cannot resolve variable 'java'
+     * - 이전 문제점: SpEL(스프링 표현식) 내부에서 패키지 경로(`java.math.BigDecimal.ZERO`)를 일반 자바 코드처럼 그대로 적으면,
+                     스프링이 'java'라는 변수를 찾으려고 시도하여 `EvaluationException` 런타임 에러가 발생하거나 캐싱 조건이 씹히게 됨.
+     * - 변경 이유: SpEL 내에서 정적 클래스나 상수를 참조할 때는 반드시 `T(클래스경로)` 연산자를 사용해야 하므로 `T(java.math.BigDecimal).ZERO`로 수정.
+     */
+    @Cacheable(value = "historicalPrices", key = "#ticker + '-' + #date", unless = "#result == null || #result.compareTo(T(java.math.BigDecimal).ZERO) == 0")
     public BigDecimal getClosingPriceByDate(String ticker, String date) {
         String symbol = convertToYahooSymbol(ticker);
         log.info("[Yahoo Finance] {} 종목의 {} 날짜 종가를 요청합니다. (심볼: {})", ticker, date, symbol);
@@ -102,15 +106,18 @@ public class MarketDataService {
     private BigDecimal fetchYahooCurrentPrice(String symbol) {
         try {
             String url = baseUrl + "/v8/finance/chart/" + symbol + "?interval=1d&range=1d";
-
-            // 💡 전역 헤더 덕분에 한 줄로 호출 끝!
             Map<String, Object> response = restClient.get().uri(url).retrieve().body(Map.class);
 
             if (response != null) {
                 Map<String, Object> chart = (Map<String, Object>) response.get("chart");
                 List<Map<String, Object>> result = (List<Map<String, Object>>) chart.get("result");
                 if (result != null && !result.isEmpty()) {
-                    Object price = ((Map<String, Object>) result.get(0).get("meta")).get("regularMarketPrice");
+                    /*
+                     * [디버깅 구간 2] Can be replaced with 'getFirst()' call
+                     * - 이전 문제점: Java 21부터 도입된 Sequenced Collections 스펙에 따라, List의 첫 번째 요소를 가져올 때 오래된 방식인 `get(0)`을 사용함.
+                     * - 변경 이유: 가독성을 높이고 순서가 보장된 컬렉션의 명확한 시맨틱(Semantic)을 활용하기 위해 최신 표준 메서드인 `.getFirst()`로 전면 교체.
+                     */
+                    Object price = ((Map<String, Object>) result.getFirst().get("meta")).get("regularMarketPrice");
                     if (price != null) return new BigDecimal(price.toString());
                 }
             }
@@ -128,18 +135,20 @@ public class MarketDataService {
             long startTs = targetDate.minusDays(14).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
 
             String url = baseUrl + "/v8/finance/chart/" + symbol + "?interval=1d&period1=" + startTs + "&period2=" + endTs;
-
-            // 💡 RestClient 스타일로 전환 및 자동 헤더 처리
             Map<String, Object> response = restClient.get().uri(url).retrieve().body(Map.class);
 
             if (response != null) {
                 Map<String, Object> chart = (Map<String, Object>) response.get("chart");
                 List<Map<String, Object>> result = (List<Map<String, Object>>) chart.get("result");
                 if (result != null && !result.isEmpty()) {
-                    List<Object> timestamps = (List<Object>) result.get(0).get("timestamp");
+                    /*
+                     * [디버깅 구간 3] Can be replaced with 'getFirst()' call (과거 종가 파트)
+                     * - 변경 이유: 데이터 구조 depth가 깊은 API 응답 특성상 무분별한 `get(0)`은 코드를 지저분하게 만듦. `.getFirst()`를 사용하여 코드 가독성을 대폭 개선.
+                     */
+                    List<Object> timestamps = (List<Object>) result.getFirst().get("timestamp");
                     List<Object> close = (List<Object>) ((List<Map<String, Object>>)
-                            ((Map<String, Object>) result.get(0).get("indicators")).get("quote"))
-                            .get(0).get("close");
+                            ((Map<String, Object>) result.getFirst().get("indicators")).get("quote"))
+                            .getFirst().get("close");
 
                     if (timestamps != null && close != null) {
                         for (int i = timestamps.size() - 1; i >= 0; i--) {
@@ -169,15 +178,20 @@ public class MarketDataService {
             try {
                 String url = baseUrl + "/v8/finance/chart/" + s + "?interval=1d&range=1d";
 
-                // 💡 RestClient 스타일 변경
-                Map response = restClient.get().uri(url).retrieve().body(Map.class);
+                /*
+                 * [디버깅 구간 4] Raw use of parameterized class 'Map'
+                 * - 이전 문제점: 제네릭 정보가 전혀 없는 원시 타입(Raw Type) `Map`을 사용하여 컴파일러가 유효한 타입 체크를 하지 못하고 경고를 뱉음.
+                 * - 변경 이유: 내부적으로 문자열 키와 오브젝트 밸류를 지니는 구조이므로 명확하게 `Map<String, Object>` 및 `List<Map<String, Object>>`로 선언하여 타입 안정성(Type Safety)을 확보함.
+                 */
+                Map<String, Object> response = restClient.get().uri(url).retrieve().body(Map.class);
 
                 if (response != null) {
-                    Map chart = (Map) response.get("chart");
+                    Map<String, Object> chart = (Map<String, Object>) response.get("chart");
                     if (chart != null) {
-                        List<Map> result = (List<Map>) chart.get("result");
+                        List<Map<String, Object>> result = (List<Map<String, Object>>) chart.get("result");
                         if (result != null && !result.isEmpty()) {
-                            Map meta = (Map) result.get(0).get("meta");
+                            // 💡 추가적으로 get(0)도 .getFirst()로 변환 완료
+                            Map<String, Object> meta = (Map<String, Object>) result.getFirst().get("meta");
                             if (meta != null) {
                                 String shortName = (String) meta.get("shortName");
                                 if (shortName != null && !shortName.isBlank()) return shortName;
@@ -203,18 +217,18 @@ public class MarketDataService {
             long period2 = end.withDayOfMonth(1).plusMonths(2).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
             String url = baseUrl + "/v8/finance/chart/" + symbol + "?interval=1mo&period1=" + period1 + "&period2=" + period2;
 
-            // 💡 RestClient 스타일 변경
             Map<String, Object> response = restClient.get().uri(url).retrieve().body(Map.class);
 
             if (response != null) {
                 Map<String, Object> chart = (Map<String, Object>) response.get("chart");
                 List<Map<String, Object>> results = (List<Map<String, Object>>) chart.get("result");
                 if (results != null && !results.isEmpty()) {
-                    List<Object> timestamps = (List<Object>) results.get(0).get("timestamp");
-                    Map<String, Object> indicators = (Map<String, Object>) results.get(0).get("indicators");
+                    // 💡 get(0) -> getFirst() 변경 적용
+                    List<Object> timestamps = (List<Object>) results.getFirst().get("timestamp");
+                    Map<String, Object> indicators = (Map<String, Object>) results.getFirst().get("indicators");
                     List<Map<String, Object>> quoteList = (List<Map<String, Object>>) indicators.get("quote");
                     if (timestamps != null && quoteList != null && !quoteList.isEmpty()) {
-                        List<Object> closes = (List<Object>) quoteList.get(0).get("close");
+                        List<Object> closes = (List<Object>) quoteList.getFirst().get("close");
                         for (int i = 0; i < timestamps.size(); i++) {
                             if (i < closes.size() && closes.get(i) != null) {
                                 long ts = ((Number) timestamps.get(i)).longValue();
@@ -245,7 +259,6 @@ public class MarketDataService {
                 url = baseUrl + "/v8/finance/chart/USDKRW=X?interval=1d&range=1d";
             }
 
-            // 💡 RestClient 스타일 변경
             Map<String, Object> response = restClient.get().uri(url).retrieve().body(Map.class);
 
             if (response != null) {
@@ -253,10 +266,11 @@ public class MarketDataService {
                 List<Map<String, Object>> result = (List<Map<String, Object>>) chart.get("result");
                 if (result != null && !result.isEmpty()) {
                     if (dateStr != null) {
-                        List<Object> timestamps = (List<Object>) result.get(0).get("timestamp");
+                        // 💡 환율 연산 로직 내 모든 get(0) -> getFirst() 최적화 완료
+                        List<Object> timestamps = (List<Object>) result.getFirst().get("timestamp");
                         List<Object> close = (List<Object>) ((List<Map<String, Object>>)
-                                ((Map<String, Object>) result.get(0).get("indicators")).get("quote"))
-                                .get(0).get("close");
+                                ((Map<String, Object>) result.getFirst().get("indicators")).get("quote"))
+                                .getFirst().get("close");
 
                         if (timestamps != null && close != null) {
                             LocalDate targetDate = LocalDate.parse(dateStr);
@@ -271,7 +285,7 @@ public class MarketDataService {
                             }
                         }
                     } else {
-                        Object rate = ((Map<String, Object>) result.get(0).get("meta")).get("regularMarketPrice");
+                        Object rate = ((Map<String, Object>) result.getFirst().get("meta")).get("regularMarketPrice");
                         if (rate != null) return new BigDecimal(rate.toString());
                     }
                 }
