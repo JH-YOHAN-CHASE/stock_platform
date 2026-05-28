@@ -8,6 +8,7 @@ import stock.service.MarketDataService;
 import stock.service.StockResolverService;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -17,6 +18,11 @@ public class MarketDataController {
 
     private final MarketDataService marketDataService;
     private final StockResolverService stockResolver;
+
+    @GetMapping("/search")
+    public ResponseEntity<ApiResponse<List<Map<String, String>>>> searchStocks(@RequestParam String query) {
+        return ResponseEntity.ok(ApiResponse.ok(stockResolver.search(query, 10)));
+    }
 
     @GetMapping("/resolve")
     public ResponseEntity<ApiResponse<Map<String, String>>> resolveStock(@RequestParam String query) {
@@ -37,6 +43,16 @@ public class MarketDataController {
     @GetMapping("/price")
     public ResponseEntity<ApiResponse<BigDecimal>> getCurrentPrice(@RequestParam String ticker) {
         BigDecimal price = marketDataService.getClosingPrice(ticker);
+        return ResponseEntity.ok(ApiResponse.ok(price));
+    }
+
+    @GetMapping("/price/raw")
+    public ResponseEntity<ApiResponse<BigDecimal>> getRawPrice(
+            @RequestParam String ticker,
+            @RequestParam(required = false) String date) {
+        BigDecimal price = date != null
+                ? marketDataService.getRawPriceByDate(ticker, date)
+                : marketDataService.getRawPrice(ticker);
         return ResponseEntity.ok(ApiResponse.ok(price));
     }
 

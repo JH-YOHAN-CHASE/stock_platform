@@ -51,6 +51,11 @@
 
 .input::placeholder { color: var(--text3); }
 
+.input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}
+
 .textarea {
   background: var(--bg3);
   border: 1px solid var(--border);
@@ -239,6 +244,49 @@
 
 .weightOk  { color: var(--green); }
 .weightErr { color: var(--red); }
+
+/* Stock search dropdown */
+.searchWrapper {
+  position: relative;
+}
+
+.dropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  background: var(--bg3);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  z-index: 200;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.dropdownItem {
+  padding: 9px 14px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text);
+  transition: background var(--transition);
+}
+
+.dropdownItem:hover {
+  background: var(--bg2);
+}
+
+.dropdownBadge {
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  color: var(--text3);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
 
 /* Actions */
 .actions {

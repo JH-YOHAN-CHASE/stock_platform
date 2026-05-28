@@ -8,6 +8,8 @@ import Button from '../components/common/Button';
 import Card from '../components/common/Card';
 import styles from './FormPage.module.css';
 
+type StockResult = { ticker: string; name: string; type: string };
+
 const getToday = () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -35,8 +37,13 @@ export default function PortfolioFormPage() {
         name: '', description: '', isPublic: false, items: [emptyItem()],
     });
     const [priceLoading, setPriceLoading] = useState<boolean[]>([false]);
+    const [usdPrices, setUsdPrices] = useState<(number | null)[]>([null]);
+    const [searchInputs, setSearchInputs] = useState<string[]>(['']);
+    const [searchResults, setSearchResults] = useState<StockResult[][]>([[]]);
+    const [showDropdowns, setShowDropdowns] = useState<boolean[]>([false]);
     const formRef = useRef(form);
     const tickerTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+    const searchTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
     useEffect(() => { formRef.current = form; }, [form]);
 
@@ -57,6 +64,10 @@ export default function PortfolioFormPage() {
                     })),
                 });
                 setPriceLoading(new Array(p.items.length).fill(false));
+                setUsdPrices(new Array(p.items.length).fill(null));
+                setSearchInputs(p.items.map(i => i.stockName ? `${i.stockName} (${i.ticker})` : i.ticker));
+                setSearchResults(new Array(p.items.length).fill([]));
+                setShowDropdowns(new Array(p.items.length).fill(false));
             });
         }
     }, [id]);
@@ -77,11 +88,12 @@ export default function PortfolioFormPage() {
     const fetchAndFillPrice = async (idx: number, ticker: string, date: string) => {
         setPriceLoading(prev => { const n = [...prev]; n[idx] = true; return n; });
         try {
-            // ticker 코드 resolve + 종목명 자동완성
             let resolvedTicker = ticker;
+            let isUs = false;
             try {
                 const resolved = await marketApi.resolveStock(ticker);
                 resolvedTicker = resolved.ticker;
+                isUs = resolved.type === 'US';
                 setForm((prev) => {
                     const items = [...prev.items];
                     const cur = items[idx];
@@ -106,37 +118,70 @@ export default function PortfolioFormPage() {
                     return { ...prev, items };
                 });
             }
+
+            if (isUs) {
+                try {
+                    const rawUsd = date
+                        ? await marketApi.getRawPrice(resolvedTicker, date)
+                        : await marketApi.getRawPrice(resolvedTicker);
+                    setUsdPrices(prev => { const n = [...prev]; n[idx] = rawUsd > 0 ? rawUsd : null; return n; });
+                } catch {
+                    setUsdPrices(prev => { const n = [...prev]; n[idx] = null; return n; });
+                }
+            } else {
+                setUsdPrices(prev => { const n = [...prev]; n[idx] = null; return n; });
+            }
         } catch {
-            // API 실패 시 조용히 무시 — 사용자가 직접 입력 가능
+            // API 실패 시 조용히 무시
         } finally {
             setPriceLoading(prev => { const n = [...prev]; n[idx] = false; return n; });
         }
     };
 
-    // 종목 검색 필드 변경 — ticker만 설정 후 가격 자동 조회 (stockName은 별도 입력)
-    const handleSearchChange = (idx: number, value: string) => {
-        const upper = value.toUpperCase();
+    const handleStockSearch = (idx: number, value: string) => {
+        setSearchInputs(prev => { const n = [...prev]; n[idx] = value; return n; });
         setForm((prev) => {
             const items = [...prev.items];
-            items[idx] = { ...items[idx], ticker: upper };
+            items[idx] = { ...items[idx], ticker: '', stockName: '' };
             return { ...prev, items };
         });
 
+        if (searchTimers.current[idx]) clearTimeout(searchTimers.current[idx]);
         if (tickerTimers.current[idx]) clearTimeout(tickerTimers.current[idx]);
 
-        if (upper.length >= 4) {
-            tickerTimers.current[idx] = setTimeout(() => {
-                const date = formRef.current.items[idx]?.purchaseDate ?? '';
-                fetchAndFillPrice(idx, upper, date);
-            }, 600);
+        if (!value.trim()) {
+            setSearchResults(prev => { const n = [...prev]; n[idx] = []; return n; });
+            setShowDropdowns(prev => { const n = [...prev]; n[idx] = false; return n; });
+            return;
         }
+
+        searchTimers.current[idx] = setTimeout(async () => {
+            try {
+                const results = await marketApi.searchStocks(value);
+                setSearchResults(prev => { const n = [...prev]; n[idx] = results; return n; });
+                setShowDropdowns(prev => { const n = [...prev]; n[idx] = results.length > 0; return n; });
+            } catch {
+                setSearchResults(prev => { const n = [...prev]; n[idx] = []; return n; });
+            }
+        }, 300);
     };
 
-    // 매수일 변경 — 해당 날짜 종가로 평균단가 자동 갱신
+    const handleStockSelect = (idx: number, ticker: string, name: string) => {
+        setSearchInputs(prev => { const n = [...prev]; n[idx] = `${name} (${ticker})`; return n; });
+        setShowDropdowns(prev => { const n = [...prev]; n[idx] = false; return n; });
+        setForm((prev) => {
+            const items = [...prev.items];
+            items[idx] = { ...items[idx], ticker, stockName: name };
+            return { ...prev, items };
+        });
+        const date = formRef.current.items[idx]?.purchaseDate ?? '';
+        fetchAndFillPrice(idx, ticker, date);
+    };
+
     const handleDateChange = (idx: number, date: string) => {
         setItem(idx, 'purchaseDate', date);
         const ticker = formRef.current.items[idx]?.ticker ?? '';
-        if (ticker.length >= 4 && date) {
+        if (ticker && date) {
             fetchAndFillPrice(idx, ticker, date);
         }
     };
@@ -144,6 +189,10 @@ export default function PortfolioFormPage() {
     const addItem = () => {
         setForm((prev) => ({ ...prev, items: [...prev.items, emptyItem()] }));
         setPriceLoading(prev => [...prev, false]);
+        setUsdPrices(prev => [...prev, null]);
+        setSearchInputs(prev => [...prev, '']);
+        setSearchResults(prev => [...prev, []]);
+        setShowDropdowns(prev => [...prev, false]);
     };
 
     const removeItem = (idx: number) => {
@@ -153,6 +202,10 @@ export default function PortfolioFormPage() {
             return { ...prev, items };
         });
         setPriceLoading(prev => prev.filter((_, i) => i !== idx));
+        setUsdPrices(prev => prev.filter((_, i) => i !== idx));
+        setSearchInputs(prev => prev.filter((_, i) => i !== idx));
+        setSearchResults(prev => prev.filter((_, i) => i !== idx));
+        setShowDropdowns(prev => prev.filter((_, i) => i !== idx));
     };
 
     const handleSubmit = async () => {
@@ -226,23 +279,43 @@ export default function PortfolioFormPage() {
                                 )}
                             </div>
                             <div className={styles.itemGrid}>
-                                <div className={styles.field}>
-                                    <label>종목코드 *</label>
-                                    <input
-                                        className={styles.input}
-                                        value={item.ticker}
-                                        onChange={(e) => handleSearchChange(idx, e.target.value)}
-                                        placeholder="예: 005930 또는 삼성전자"
-                                    />
-                                </div>
-                                <div className={styles.field}>
-                                    <label>종목명 *</label>
-                                    <input
-                                        className={styles.input}
-                                        value={item.stockName}
-                                        onChange={(e) => setItem(idx, 'stockName', e.target.value)}
-                                        placeholder="예: 삼성전자"
-                                    />
+                                <div className={styles.field} style={{ gridColumn: 'span 2', position: 'relative' }}>
+                                    <label>종목 검색 *</label>
+                                    <div className={styles.searchWrapper}>
+                                        <input
+                                            className={styles.input}
+                                            value={searchInputs[idx] ?? ''}
+                                            onChange={(e) => handleStockSearch(idx, e.target.value)}
+                                            onFocus={() => {
+                                                if ((searchResults[idx]?.length ?? 0) > 0) {
+                                                    setShowDropdowns(prev => { const n = [...prev]; n[idx] = true; return n; });
+                                                }
+                                            }}
+                                            onBlur={() => setTimeout(() => {
+                                                setShowDropdowns(prev => { const n = [...prev]; n[idx] = false; return n; });
+                                            }, 150)}
+                                            placeholder="종목코드, 종목명, 티커 입력 (예: 삼성전자, 005930, AAPL)"
+                                        />
+                                        {showDropdowns[idx] && (searchResults[idx]?.length ?? 0) > 0 && (
+                                            <div className={styles.dropdown}>
+                                                {searchResults[idx].map((result, i) => (
+                                                    <div
+                                                        key={i}
+                                                        className={styles.dropdownItem}
+                                                        onMouseDown={() => handleStockSelect(idx, result.ticker, result.name)}
+                                                    >
+                                                        <span>{result.name}</span>
+                                                        <span className={styles.dropdownBadge}>
+                                                            <span>{result.ticker}</span>
+                                                            <span style={{ color: result.type === 'KOREAN' ? 'var(--accent)' : 'var(--accent2)' }}>
+                                                                {result.type === 'KOREAN' ? 'KR' : 'US'}
+                                                            </span>
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className={styles.field}>
                                     <label>수량 *</label>
@@ -266,7 +339,8 @@ export default function PortfolioFormPage() {
                                         type="text"
                                         inputMode="numeric"
                                         value={item.avgBuyPrice > 0
-                                            ? Number(item.avgBuyPrice).toLocaleString('ko-KR') + ' 원'
+                                            ? Number(item.avgBuyPrice).toLocaleString('ko-KR') + ' 원' +
+                                              (usdPrices[idx] != null ? ` ($${Number(usdPrices[idx]).toFixed(2)})` : '')
                                             : ''}
                                         onChange={(e) => {
                                             const raw = e.target.value.replace(/[^0-9]/g, '');
@@ -274,7 +348,7 @@ export default function PortfolioFormPage() {
                                         }}
                                         disabled={priceLoading[idx]}
                                         style={priceLoading[idx] ? { opacity: 0.6 } : undefined}
-                                        placeholder="종목코드 입력 시 자동 조회"
+                                        placeholder="종목 선택 시 자동 조회"
                                     />
                                 </div>
                                 <div className={styles.field}>
@@ -287,7 +361,7 @@ export default function PortfolioFormPage() {
                                     />
                                 </div>
                                 <div className={styles.field}>
-                                    <label>비중 (%) <span style={{ fontSize: '0.75rem', color: '#999' }}>(자동계산)</span></label>
+                                    <label>비중 (%)</label>
                                     <input
                                         className={styles.input}
                                         type="text"
