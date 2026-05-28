@@ -10,8 +10,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/chat")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
-@SuppressWarnings("NullableProblems")
+//@CrossOrigin(origins = "*")불필요?
+@SuppressWarnings("NullableProblems")//채팅이 없더라도 빈 배열을 보내기에 null 걱정 없어?
 public class ChatRestController {
 
     private final ChatService chatService;

@@ -25,9 +25,7 @@ public class PortfolioService {
     private final PortfolioConverter portfolioConverter;
     private final UserService userService;
 
-    // 외부 증권사 데이터를 캐싱하여 가져오는 서비스 주입
     private final MarketDataService marketDataService;
-    private final StockResolverService stockResolverService;
 
     // 내 포트폴리오 목록
     public List<PortfolioDto.SummaryResponse> getMyPortfolios(Long userId) {
@@ -48,21 +46,19 @@ public class PortfolioService {
         // Entity -> DTO 변환
         PortfolioDto.Response response = portfolioConverter.toResponse(portfolio);
 
-        // 변환된 DTO의 각 종목(Item)에 증권사 API로부터 가져온 '현재가'를 세팅합니다.
+        // 💡 [리팩토링 핵심] 야후 파이낸스 통합으로 코드가 매우 단순해졌습니다.
         if (response.getItems() != null) {
             response.getItems().forEach(item -> {
-                StockResolverService.ResolvedStock resolved = stockResolverService.resolve(item.getTicker());
-                BigDecimal currentPrice = switch (resolved.type()) {
-                    case KOREAN -> marketDataService.getClosingPrice(resolved.ticker());
-                    case US     -> marketDataService.getUsClosingPrice(resolved.ticker());
-                    default     -> BigDecimal.ZERO;
-                };
+                // 1. 국내 주식이든 미국 주식이든 상관없이 ticker만 넘기면 원화(KRW) 기준 현재가를 알아서 반환합니다.
+                BigDecimal currentPrice = marketDataService.getClosingPrice(item.getTicker());
                 item.setCurrentPrice(currentPrice);
 
-                if (resolved.type() == StockResolverService.StockType.US
-                        && (item.getStockName() == null || item.getStockName().equalsIgnoreCase(item.getTicker()))) {
-                    String companyName = marketDataService.fetchCompanyName(resolved.ticker());
-                    if (companyName != null) item.setStockName(companyName);
+                // 2. 회사명이 비어있거나 티커명과 동일하게 들어가 있다면 야후 파이낸스에서 정식 명칭을 가져옵니다.
+                if (item.getStockName() == null || item.getStockName().equalsIgnoreCase(item.getTicker())) {
+                    String companyName = marketDataService.fetchCompanyName(item.getTicker());
+                    if (companyName != null) {
+                        item.setStockName(companyName);
+                    }
                 }
             });
         }
@@ -70,7 +66,7 @@ public class PortfolioService {
         return response;
     }
 
-    // 공개 포트폴리오 목록 (비교용)
+    // 공개 포트폴리오 목록
     public List<PortfolioDto.SummaryResponse> getPublicPortfolios(Long userId) {
         return portfolioRepository.findAllPublicPortfolios().stream()
                 .map(portfolioConverter::toSummaryResponse)
@@ -116,7 +112,7 @@ public class PortfolioService {
         portfolioRepository.delete(portfolio);
     }
 
-    // 비교용: 두 포트폴리오 동시 조회 (내부적으로 getPortfolio를 호출하므로 현재가가 자동으로 모두 세팅됨)
+    // 비교용: 두 포트폴리오 동시 조회 현재가
     public List<PortfolioDto.Response> comparePortfolios(List<Long> portfolioIds, Long userId) {
         return portfolioIds.stream()
                 .map(id -> getPortfolio(id, userId))
