@@ -102,8 +102,8 @@
 
 .metricsGrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
   margin-bottom: 20px;
 }
 
@@ -113,10 +113,11 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 8px;
+  white-space: nowrap;
 }
 
 .metricValue {
-  font-size: 26px;
+  font-size: 20px;
   font-weight: 700;
   font-family: 'Space Mono', monospace;
 }

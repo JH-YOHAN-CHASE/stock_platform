@@ -89,8 +89,12 @@ public class BacktestService {
         double cagr = years > 0 ? (Math.pow(finalValue / (double) totalInvested, 1.0 / years) - 1) * 100 : 0;
         double mdd = calcMdd(portfolioValues);
         double[] volAndSharpe = calcVolatilityAndSharpe(portfolioValues, cagr);
-        double kospiReturn = calcBenchmarkReturn(kospiPrices, months);
-        double sp500Return = calcBenchmarkReturn(sp500Prices, months);
+
+        // 벤치마크 수익률도 포트폴리오와 동일한 기준(총 투자금 대비)으로 계산
+        double kospiFinal = kospiValues.isEmpty() ? initialInvestment : kospiValues.get(kospiValues.size() - 1);
+        double sp500Final = sp500Values.isEmpty() ? initialInvestment : sp500Values.get(sp500Values.size() - 1);
+        double kospiReturn = (kospiFinal - totalInvested) / totalInvested * 100;
+        double sp500Return = (sp500Final - totalInvested) / totalInvested * 100;
 
         BacktestResponseDto.Metrics metrics = new BacktestResponseDto.Metrics(
                 round2(totalReturn), round2(cagr), round2(mdd),
@@ -244,13 +248,6 @@ public class BacktestService {
         double vol = Math.sqrt(variance) * Math.sqrt(12) * 100;
         double sharpe = vol > 0 ? (cagr - 3.5) / vol : 0;
         return new double[]{vol, sharpe};
-    }
-
-    private double calcBenchmarkReturn(TreeMap<YearMonth, Double> prices, List<YearMonth> months) {
-        if (prices.isEmpty() || months.isEmpty()) return 0;
-        Double s = prices.get(months.get(0));
-        Double e = prices.get(months.get(months.size() - 1));
-        return (s != null && s > 0 && e != null) ? (e - s) / s * 100 : 0;
     }
 
     private List<BacktestResponseDto.YearlyReturn> calcYearlyReturns(List<YearMonth> months, List<Double> portfolioValues,
