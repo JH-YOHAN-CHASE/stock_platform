@@ -26,6 +26,7 @@ public class PortfolioService {
     private final UserService userService;
 
     private final MarketDataService marketDataService;
+    private final StockResolverService stockResolverService;
 
     // 내 포트폴리오 목록
     public List<PortfolioDto.SummaryResponse> getMyPortfolios(Long userId) {
@@ -49,13 +50,18 @@ public class PortfolioService {
         // 💡 [리팩토링 핵심] 야후 파이낸스 통합으로 코드가 매우 단순해졌습니다.
         if (response.getItems() != null) {
             response.getItems().forEach(item -> {
-                // 1. 국내 주식이든 미국 주식이든 상관없이 ticker만 넘기면 원화(KRW) 기준 현재가를 알아서 반환합니다.
-                BigDecimal currentPrice = marketDataService.getClosingPrice(item.getTicker());
-                item.setCurrentPrice(currentPrice);
+                StockResolverService.ResolvedStock resolved = stockResolverService.resolve(item.getTicker());
+                String resolvedTicker = resolved.ticker();
 
-                // 2. 회사명이 비어있거나 티커명과 동일하게 들어가 있다면 야후 파이낸스에서 정식 명칭을 가져옵니다.
+                try {
+                    BigDecimal currentPrice = marketDataService.getClosingPrice(resolvedTicker);
+                    item.setCurrentPrice(currentPrice);
+                } catch (Exception e) {
+                    item.setCurrentPrice(BigDecimal.ZERO);
+                }
+
                 if (item.getStockName() == null || item.getStockName().equalsIgnoreCase(item.getTicker())) {
-                    String companyName = marketDataService.fetchCompanyName(item.getTicker());
+                    String companyName = marketDataService.fetchCompanyName(resolvedTicker);
                     if (companyName != null) {
                         item.setStockName(companyName);
                     }

@@ -13,7 +13,11 @@ for market in ["KOSPI", "KOSDAQ"]:
             name = str(row.get("Name", "")).strip()
             if code and name and code not in seen:
                 seen.add(code)
-                stocks.append({"code": code, "ko": name})
+                en = str(row.get("Symbol", "")).strip() or str(row.get("Code", "")).strip()
+                entry = {"code": code, "ko": name}
+                if en and en != code:
+                    entry["en"] = en.upper()
+                stocks.append(entry)
         print(f"{market}: {len(df)}개 로드")
     except Exception as e:
         print(f"{market} 로드 실패: {e}")

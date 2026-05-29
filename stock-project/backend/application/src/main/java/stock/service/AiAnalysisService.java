@@ -4,21 +4,20 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.RestClient;
 import stock.dto.AiSimulationResponseDto;
 import stock.dto.PortfolioDto;
 import stock.dto.CustomIndexDto;
-import tools.jackson.databind.JsonNode; //
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
 
 @Slf4j
 @Service
@@ -28,7 +27,7 @@ public class AiAnalysisService {
     private final PortfolioService portfolioService;
     private final CustomIndexService customIndexService;
     private final ObjectMapper objectMapper;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestClient restClient;
 
     @Value("${gemini.api.url}")
     private String geminiApiUrl;
@@ -110,9 +109,6 @@ public class AiAnalysisService {
     private String callGeminiApi(String prompt) {
         String url = geminiApiUrl + "?key=" + geminiApiKey;
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
         Map<String, Object> requestBody = Map.of(
                 "contents", List.of(Map.of(
                         "parts", List.of(Map.of("text", prompt))
@@ -121,35 +117,40 @@ public class AiAnalysisService {
 
         try {
             String jsonRequestBody = objectMapper.writeValueAsString(requestBody);
-            String responseString = restTemplate.postForObject(url, new HttpEntity<>(jsonRequestBody, headers), String.class);
+
+            String responseString = restClient.post()
+                    .uri(url)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(jsonRequestBody)
+                    .retrieve()
+                    .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                            (req, resp) -> {
+                                byte[] bodyBytes = resp.getBody().readAllBytes();
+                                String errorBody = new String(bodyBytes, java.nio.charset.StandardCharsets.UTF_8);
+                                log.error("[Gemini API] HTTP {} 에러 응답: {}", resp.getStatusCode(), errorBody);
+                                throw new RuntimeException("Gemini API HTTP 에러: " + resp.getStatusCode());
+                            })
+                    .body(String.class);
 
             if (responseString != null) {
                 JsonNode rootNode = objectMapper.readTree(responseString);
                 JsonNode candidatesNode = rootNode.path("candidates");
 
                 if (candidatesNode.isArray() && !candidatesNode.isEmpty()) {
-                    /*
-                     * [수정 구간] 'asText()' is deprecated
-                     * - 수정 이유: 최신 Jackson 라이브러리(또는 다음 메이저 버전)에서는 모든 노드에 포괄적으로 적용되던 `asText()` 대신,
-                     * 실제 텍스트 노드에 특화된 명확한 메서드 호출을 지향하거나 이름을 교체하고 있음.
-                     * - 해결 방법: 해당 위치가 완전히 문자열 값(TextNode)을 가져오는 구간이므로 `.textValue()`를 명시적으로 사용.
-                     * - 결과: Deprecated 경고가 완전히 해결되며 안전하게 원본 텍스트 데이터 추출 가능.
-                     */
-                    String rawText = candidatesNode.get(0)
-                            .path("content")
-                            .path("parts")
-                            .get(0)
-                            .path("text")
-                            .textValue();
-
-                    if (rawText != null) {
-                        return rawText.replaceAll("```json", "").replaceAll("```", "").trim();
+                    JsonNode parts = candidatesNode.get(0).path("content").path("parts");
+                    for (JsonNode part : parts) {
+                        if (part.path("thought").asBoolean(false)) continue;
+                        String rawText = part.path("text").textValue();
+                        if (rawText != null && !rawText.isBlank()) {
+                            return rawText.replaceAll("```json", "").replaceAll("```", "").trim();
+                        }
                     }
                 }
+                log.error("[Gemini API] 예상치 못한 응답 구조: {}", responseString);
             }
         } catch (Exception e) {
-            log.error("[Gemini API] 통신 실패: {}", e.getMessage());
+            log.error("[Gemini API] 통신 실패: {}", e.getMessage(), e);
         }
-        return "{}";
+        throw new RuntimeException("Gemini API 호출에 실패했습니다. 백엔드 로그를 확인하세요.");
     }
 }
