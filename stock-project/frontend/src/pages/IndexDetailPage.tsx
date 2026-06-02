@@ -80,7 +80,6 @@ export default function IndexDetailPage() {
                             <th>지표명</th>
                             <th>방향성</th>
                             <th>설명</th>
-                            <th>데이터 코드</th>
                         </tr>
                         </thead>
                         <tbody>
@@ -98,7 +97,6 @@ export default function IndexDetailPage() {
                     </span>
                                 </td>
                                 <td style={{ color: 'var(--text2)', fontSize: 13 }}>{c.description || '—'}</td>
-                                <td style={{ fontFamily: 'Space Mono', fontSize: 12, color: 'var(--text3)' }}>{c.dataSourceCode || '—'}</td>
                             </tr>
                         ))}
                         </tbody>

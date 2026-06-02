@@ -63,12 +63,8 @@ export default function IndexFormPage() {
   const removeComp = (idx: number) =>
     setForm((p) => ({ ...p, components: p.components.filter((_, i) => i !== idx) }));
 
-  const totalWeight = form.components.reduce((s, c) => s + Number(c.weight || 0), 0);
-  const weightOk = Math.abs(totalWeight - 100) < 0.01;
-
   const handleSubmit = async () => {
     if (!form.name.trim()) return alert('지수 이름을 입력하세요');
-    if (!weightOk) return alert(`가중치 합계가 100%여야 합니다. (현재: ${totalWeight.toFixed(2)}%)`);
     setSaving(true);
     try {
       if (isEdit) {
@@ -120,17 +116,7 @@ export default function IndexFormPage() {
         <Card>
           <div className={styles.cardTitleRow}>
             <h3 className={styles.cardTitle}>지표 구성</h3>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span className={`${styles.weightTotal} ${weightOk ? styles.weightOk : styles.weightErr}`}>
-                합계: {totalWeight.toFixed(1)}% {weightOk ? '✓' : '(100%가 되어야 합니다)'}
-              </span>
-              <Button variant="secondary" size="sm" onClick={addComp}>＋ 지표 추가</Button>
-            </div>
-          </div>
-
-          {/* 전체 가중치 바 */}
-          <div className={styles.weightBar} style={{ marginBottom: 20 }}>
-            <div className={styles.weightBarFill} style={{ width: `${Math.min(totalWeight, 100)}%` }} />
+            <Button variant="secondary" size="sm" onClick={addComp}>＋ 지표 추가</Button>
           </div>
 
           {form.components.map((comp, idx) => (
@@ -164,7 +150,8 @@ export default function IndexFormPage() {
                     className={styles.input}
                     value={comp.indicatorName}
                     onChange={(e) => setComp(idx, 'indicatorName', e.target.value)}
-                    placeholder="예: 미국 기준금리"
+                    placeholder={comp.indicatorType === 'CUSTOM' ? '지표명을 입력하세요' : '지표 유형에서 자동 설정됩니다'}
+                    disabled={comp.indicatorType !== 'CUSTOM'}
                   />
                 </div>
                 <div className={styles.field}>
@@ -191,15 +178,6 @@ export default function IndexFormPage() {
                     placeholder="이 지표의 역할"
                   />
                 </div>
-                <div className={styles.field}>
-                  <label>데이터 소스 코드</label>
-                  <input
-                    className={styles.input}
-                    value={comp.dataSourceCode}
-                    onChange={(e) => setComp(idx, 'dataSourceCode', e.target.value)}
-                    placeholder="예: FEDFUNDS (FRED API)"
-                  />
-                </div>
               </div>
             </div>
           ))}
@@ -208,7 +186,7 @@ export default function IndexFormPage() {
         {/* 저장 버튼 */}
         <div className={styles.actions}>
           <Button variant="secondary" onClick={() => navigate(-1)}>취소</Button>
-          <Button onClick={handleSubmit} loading={saving} disabled={!weightOk}>
+          <Button onClick={handleSubmit} loading={saving}>
             {isEdit ? '저장' : '지수 생성'}
           </Button>
         </div>

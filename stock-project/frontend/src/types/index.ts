@@ -63,7 +63,6 @@ export type IndicatorType =
   | 'INTEREST_RATE'
   | 'EXCHANGE_RATE'
   | 'OIL_PRICE'
-  | 'TARIFF'
   | 'CPI'
   | 'EMPLOYMENT'
   | 'GDP'
@@ -75,7 +74,6 @@ export const INDICATOR_LABELS: Record<IndicatorType, string> = {
   INTEREST_RATE: '금리',
   EXCHANGE_RATE: '환율',
   OIL_PRICE: '국제유가',
-  TARIFF: '관세',
   CPI: 'CPI (소비자물가)',
   EMPLOYMENT: '고용지표',
   GDP: 'GDP',
