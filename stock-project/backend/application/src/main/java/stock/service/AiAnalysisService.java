@@ -116,42 +116,49 @@ public class AiAnalysisService {
                 ))
         );
 
-        try {
-            String jsonRequestBody = objectMapper.writeValueAsString(requestBody);
+        int maxRetries = 3;
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                String jsonRequestBody = objectMapper.writeValueAsString(requestBody);
 
-            String responseString = restClient.post()
-                    .uri(url)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(jsonRequestBody)
-                    .retrieve()
-                    .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-                            (req, resp) -> {
-                                byte[] bodyBytes = resp.getBody().readAllBytes();
-                                String errorBody = new String(bodyBytes, java.nio.charset.StandardCharsets.UTF_8);
-                                log.error("[Gemini API] HTTP {} 에러 응답: {}", resp.getStatusCode(), errorBody);
-                                throw new RuntimeException("Gemini API HTTP 에러: " + resp.getStatusCode());
-                            })
-                    .body(String.class);
+                String responseString = restClient.post()
+                        .uri(url)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(jsonRequestBody)
+                        .retrieve()
+                        .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                                (req, resp) -> {
+                                    byte[] bodyBytes = resp.getBody().readAllBytes();
+                                    String errorBody = new String(bodyBytes, java.nio.charset.StandardCharsets.UTF_8);
+                                    log.error("[Gemini API] HTTP {} 에러 응답: {}", resp.getStatusCode(), errorBody);
+                                    throw new RuntimeException("Gemini API HTTP 에러: " + resp.getStatusCode());
+                                })
+                        .body(String.class);
 
-            if (responseString != null) {
-                JsonNode rootNode = objectMapper.readTree(responseString);
-                JsonNode candidatesNode = rootNode.path("candidates");
+                if (responseString != null) {
+                    JsonNode rootNode = objectMapper.readTree(responseString);
+                    JsonNode candidatesNode = rootNode.path("candidates");
 
-                if (candidatesNode.isArray() && !candidatesNode.isEmpty()) {
-                    JsonNode parts = candidatesNode.get(0).path("content").path("parts");
-                    for (JsonNode part : parts) {
-                        if (part.path("thought").asBoolean(false)) continue;
-                        String rawText = part.path("text").textValue();
-                        if (rawText != null && !rawText.isBlank()) {
-                            // 프롬프트가 강력해도 만약을 위해 마크다운 잔재를 확실히 제거
-                            return rawText.replace("```json", "").replace("```", "").trim();
+                    if (candidatesNode.isArray() && !candidatesNode.isEmpty()) {
+                        JsonNode parts = candidatesNode.get(0).path("content").path("parts");
+                        for (JsonNode part : parts) {
+                            if (part.path("thought").asBoolean(false)) continue;
+                            String rawText = part.path("text").textValue();
+                            if (rawText != null && !rawText.isBlank()) {
+                                return rawText.replace("```json", "").replace("```", "").trim();
+                            }
                         }
                     }
+                    log.error("[Gemini API] 예상치 못한 응답 구조: {}", responseString);
                 }
-                log.error("[Gemini API] 예상치 못한 응답 구조: {}", responseString);
+            } catch (Exception e) {
+                log.warn("[Gemini API] 시도 {}/{} 실패: {}", attempt, maxRetries, e.getMessage());
+                if (attempt < maxRetries) {
+                    try { Thread.sleep(3000L * attempt); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                } else {
+                    log.error("[Gemini API] 최종 실패", e);
+                }
             }
-        } catch (Exception e) {
-            log.error("[Gemini API] 통신 실패: {}", e.getMessage(), e);
         }
         throw new RuntimeException("Gemini API 호출에 실패했습니다. 백엔드 로그를 확인하세요.");
     }

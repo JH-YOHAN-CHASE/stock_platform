@@ -14,21 +14,21 @@ public class AiSimulationResponseDto {
     @Data
     public static class Performance {
         @JsonProperty("return")
-        private double returnRate; // JSON의 "return"과 매핑
-        private double drawdown;
-        private double score;
+        private Double returnRate;
+        private Double drawdown;
+        private Double score;
     }
 
     @Data
     public static class ChartPoint {
         private String period;
-        private double value;
+        private Double value;
     }
 
     @Data
     public static class RadarPoint {
         private String subject;
-        private int portfolio;
-        private int index_avg;
+        private Integer portfolio;
+        private Integer index_avg;
     }
 }

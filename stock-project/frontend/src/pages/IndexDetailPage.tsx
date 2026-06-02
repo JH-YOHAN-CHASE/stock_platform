@@ -78,7 +78,7 @@ export default function IndexDetailPage() {
                             <th>#</th>
                             <th>지표 유형</th>
                             <th>지표명</th>
-                            <th>상관 방향</th>
+                            <th>방향성</th>
                             <th>설명</th>
                             <th>데이터 코드</th>
                         </tr>
@@ -94,7 +94,7 @@ export default function IndexDetailPage() {
                                 {/* 💡 가중치 렌더링 영역 완전히 제거됨 */}
                                 <td>
                     <span className={c.direction === 1 ? styles.positive : styles.negative}>
-                      {c.direction === 1 ? '↑ 양의 상관' : '↓ 음의 상관'}
+                      {c.direction === 1 ? '↑ 상승' : '↓ 하락'}
                     </span>
                                 </td>
                                 <td style={{ color: 'var(--text2)', fontSize: 13 }}>{c.description || '—'}</td>

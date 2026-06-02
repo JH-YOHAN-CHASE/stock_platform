@@ -168,18 +168,18 @@ export default function IndexFormPage() {
                   />
                 </div>
                 <div className={styles.field}>
-                  <label>상관 방향 *</label>
+                  <label>방향성 *</label>
                   <div className={styles.directionGroup}>
                     <button
                       className={`${styles.dirBtn} ${styles.dirBtnPos} ${comp.direction === 1 ? styles.active : ''}`}
                       onClick={() => setComp(idx, 'direction', 1)}
                       type="button"
-                    >↑ 양의 상관</button>
+                    >↑ 상승</button>
                     <button
                       className={`${styles.dirBtn} ${styles.dirBtnNeg} ${comp.direction === -1 ? styles.active : ''}`}
                       onClick={() => setComp(idx, 'direction', -1)}
                       type="button"
-                    >↓ 음의 상관</button>
+                    >↓ 하락</button>
                   </div>
                 </div>
                 <div className={styles.field}>
