@@ -1,22 +1,26 @@
 package stock.dto;
 
 import lombok.Builder;
-import lombok.Getter;
-
 import java.util.List;
 
 public class BacktestResponseDto {
 
-    @Getter
     @Builder
-    public static class Response {
-        private List<ChartPoint> chartData;
-        private Metrics metrics;
-        private List<YearlyReturn> yearlyReturns;
-    }
+    public record Response(
+            List<ChartPoint> chartData,
+            Metrics metrics,
+            List<YearlyReturn> yearlyReturns
+    ) {}
 
-    public record ChartPoint(String date, long portfolioValue, long kospiValue, long sp500Value) {}
+    @Builder
+    public record ChartPoint(
+            String date,
+            long portfolioValue,
+            long kospiValue,
+            long sp500Value
+    ) {}
 
+    @Builder
     public record Metrics(
             double totalReturn,
             double cagr,
@@ -30,5 +34,11 @@ public class BacktestResponseDto {
             long totalInvested
     ) {}
 
-    public record YearlyReturn(int year, double portfolioReturn, double kospiReturn, double sp500Return) {}
+    @Builder
+    public record YearlyReturn(
+            int year,
+            double portfolioReturn,
+            double kospiReturn,
+            double sp500Return
+    ) {}
 }

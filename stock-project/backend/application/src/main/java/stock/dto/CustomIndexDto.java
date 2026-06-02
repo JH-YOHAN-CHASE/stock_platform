@@ -60,9 +60,9 @@ public class CustomIndexDto {
         @Size(max = 50)
         private String indicatorName;
 
-        @NotNull
-        @DecimalMin("0.01") @DecimalMax("100.00")
-        private BigDecimal weight;
+//        @NotNull
+//        @DecimalMin("0.01") @DecimalMax("100.00")
+//        private BigDecimal weight;
 
         @NotNull
         private Integer direction;  // 1 or -1
@@ -96,7 +96,7 @@ public class CustomIndexDto {
         private Long id;
         private IndexComponent.IndicatorType indicatorType;
         private String indicatorName;
-        private BigDecimal weight;
+        //private BigDecimal weight;
         private Integer direction;
         private String description;
         private String dataSourceCode;

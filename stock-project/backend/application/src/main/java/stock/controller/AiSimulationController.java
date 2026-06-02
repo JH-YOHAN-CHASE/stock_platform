@@ -1,5 +1,6 @@
 package stock.controller;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +22,7 @@ public class AiSimulationController {
 
     @PostMapping("/simulation")
     public ResponseEntity<ApiResponse<AiSimulationResponseDto>> runSimulation(
+            @Valid
             @RequestBody AiSimulationRequestDto request,
             @AuthenticationPrincipal Long userId) {
 

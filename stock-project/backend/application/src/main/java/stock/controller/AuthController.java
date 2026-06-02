@@ -1,5 +1,6 @@
 package stock.controller;
 
+import jakarta.validation.Valid;
 import stock.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,7 @@ public class AuthController {
     // 현재 로그인한 사용자 정보
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getMe(
+            @Valid
             @AuthenticationPrincipal Long userId) {
         User user = userService.getById(userId);
         Map<String, Object> data = Map.of(

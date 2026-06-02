@@ -1,5 +1,7 @@
 package stock.service;
 
+import stock.dto.BacktestRequestDto;
+import stock.dto.BacktestResponseDto;
 import stock.entity.Portfolio;
 import stock.entity.PortfolioItem;
 import stock.entity.User;
@@ -24,9 +26,10 @@ public class PortfolioService {
     private final PortfolioItemRepository portfolioItemRepository;
     private final PortfolioConverter portfolioConverter;
     private final UserService userService;
-
     private final MarketDataService marketDataService;
-    private final StockResolverService stockResolverService;
+
+    // ⭐ [리팩토링 핵심] 야후 데이터를 활용한 시계열 차트 계산을 위해 BacktestService 주입!
+    private final BacktestService backtestService;
 
     // 내 포트폴리오 목록
     public List<PortfolioDto.SummaryResponse> getMyPortfolios(Long userId) {
@@ -47,21 +50,16 @@ public class PortfolioService {
         // Entity -> DTO 변환
         PortfolioDto.Response response = portfolioConverter.toResponse(portfolio);
 
-        // 💡 [리팩토링 핵심] 야후 파이낸스 통합으로 코드가 매우 단순해졌습니다.
+        // 야후 파이낸스 통합으로 코드가 매우 단순해졌습니다.
         if (response.getItems() != null) {
             response.getItems().forEach(item -> {
-                StockResolverService.ResolvedStock resolved = stockResolverService.resolve(item.getTicker());
-                String resolvedTicker = resolved.ticker();
+                // 1. 국내 주식이든 미국 주식이든 상관없이 ticker만 넘기면 원화(KRW) 기준 현재가를 알아서 반환합니다.
+                BigDecimal currentPrice = marketDataService.getClosingPrice(item.getTicker());
+                item.setCurrentPrice(currentPrice);
 
-                try {
-                    BigDecimal currentPrice = marketDataService.getClosingPrice(resolvedTicker);
-                    item.setCurrentPrice(currentPrice);
-                } catch (Exception e) {
-                    item.setCurrentPrice(BigDecimal.ZERO);
-                }
-
+                // 2. 회사명이 비어있거나 티커명과 동일하게 들어가 있다면 야후 파이낸스에서 정식 명칭을 가져옵니다.
                 if (item.getStockName() == null || item.getStockName().equalsIgnoreCase(item.getTicker())) {
-                    String companyName = marketDataService.fetchCompanyName(resolvedTicker);
+                    String companyName = marketDataService.fetchCompanyName(item.getTicker());
                     if (companyName != null) {
                         item.setStockName(companyName);
                     }
@@ -118,10 +116,38 @@ public class PortfolioService {
         portfolioRepository.delete(portfolio);
     }
 
-    // 비교용: 두 포트폴리오 동시 조회 현재가
-    public List<PortfolioDto.Response> comparePortfolios(List<Long> portfolioIds, Long userId) {
-        return portfolioIds.stream()
-                .map(id -> getPortfolio(id, userId))
-                .collect(Collectors.toList());
+    // ⭐ [신규 추가] 단순 비교 메서드를 삭제하고 차트 전용 비교 메서드로 교체 완료!
+    public List<PortfolioDto.CompareChartResponse> comparePortfoliosWithChart(PortfolioDto.CompareChartRequest request, Long userId) {
+        return request.getPortfolioIds().stream().map(portfolioId -> {
+
+            Portfolio portfolio = portfolioRepository.findById(portfolioId)
+                    .orElseThrow(() -> new IllegalArgumentException("포트폴리오를 찾을 수 없습니다"));
+
+            // 비공개 포트폴리오에 대한 접근 권한 방어 로직 추가
+            if (!portfolio.isPublic() && !portfolio.getUser().getId().equals(userId)) {
+                throw new SecurityException("접근 권한이 없습니다");
+            }
+
+            // 프론트엔드에서 넘어온 금액/기간 정보를 백테스트 요청 DTO로 변환
+            BacktestRequestDto backtestReq = BacktestRequestDto.builder()
+                    .portfolioId(portfolioId)
+                    .startDate(request.getStartDate())
+                    .endDate(request.getEndDate())
+                    .initialInvestment(request.getInitialInvestment())
+                    .monthlyAddition(request.getMonthlyAddition())
+                    .rebalancing(BacktestRequestDto.RebalancingType.NONE)
+                    .build();
+
+            // 백테스트 서비스 재사용하여 시계열 차트 연산 수행
+            BacktestResponseDto.Response backtestResult = backtestService.runBacktest(backtestReq, userId);
+
+            // 최종 응답 객체 조립
+            return PortfolioDto.CompareChartResponse.builder()
+                    .portfolioId(portfolio.getId())
+                    .portfolioName(portfolio.getName())
+                    .backtestData(backtestResult)
+                    .build();
+
+        }).collect(Collectors.toList());
     }
 }

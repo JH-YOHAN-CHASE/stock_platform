@@ -124,4 +124,27 @@ public class PortfolioDto {
         private int itemCount;
         private LocalDateTime createdAt;
     }
+    // ── Compare Chart Request & Response (시계열 차트 비교 전용) ────────
+
+    @Getter
+    @NoArgsConstructor
+    public static class CompareChartRequest {
+        @NotEmpty(message = "비교할 포트폴리오를 선택해주세요")
+        private List<Long> portfolioIds;
+
+        private String startDate;       // 예: "2023-01-01"
+        private String endDate;         // 예: "2024-01-01"
+        private long initialInvestment; // 초기 투자금
+        private long monthlyAddition;   // 매월 적립금
+    }
+
+    @Getter
+    @Builder
+    public static class CompareChartResponse {
+        private Long portfolioId;
+        private String portfolioName;
+
+        // 백테스트(시뮬레이션) 결과를 통째로 담아서 프론트엔드 차트로 넘겨줍니다.
+        private BacktestResponseDto.Response backtestData;
+    }
 }

@@ -168,15 +168,6 @@ export default function IndexFormPage() {
                   />
                 </div>
                 <div className={styles.field}>
-                  <label>가중치 (%) *</label>
-                  <input
-                    className={styles.input}
-                    type="number" min={0} max={100} step="0.01"
-                    value={comp.weight}
-                    onChange={(e) => setComp(idx, 'weight', Number(e.target.value))}
-                  />
-                </div>
-                <div className={styles.field}>
                   <label>상관 방향 *</label>
                   <div className={styles.directionGroup}>
                     <button

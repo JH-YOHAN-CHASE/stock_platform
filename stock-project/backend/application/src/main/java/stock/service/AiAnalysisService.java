@@ -18,7 +18,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -53,9 +52,10 @@ public class AiAnalysisService {
         // 2. 지수(Index) 구성 지표들 가져오기
         CustomIndexDto.Response indexData = customIndexService.getIndex(indexId, userId);
 
+        // 💡 [수정] 가중치를 제거했으므로 포맷팅 문자열에서도 가중치를 삭제하고 방향을 한글로 치환
         String indexDetails = indexData.getComponents().stream()
-                .map(c -> String.format("- %s (방향: %s, 가중치: %s%%)",
-                        c.getIndicatorName(), c.getDirection(), c.getWeight()))
+                .map(c -> String.format("- %s (방향: %s)",
+                        c.getIndicatorName(), c.getDirection() == 1 ? "양의 상관" : "음의 상관"))
                 .collect(Collectors.joining("\n"));
 
         // 3. 레이더 차트의 축 동적 생성
@@ -64,9 +64,7 @@ public class AiAnalysisService {
                 .collect(Collectors.joining(",\n"));
 
         /*
-         * [수정 구간 1] Concatenation can be replaced with text block
-         * - 수정 이유: Java 15부터 도입된 Text Block(`"""`) 문법을 사용하면, 수많은 기호(`+`, `\n`) 없이도 멀티라인 문자열을 그대로 작성할 수 있음.
-         * - 결과: 프롬프트용 템플릿과 JSON 스키마 구조가 한눈에 들어와 가독성이 폭발적으로 상승하고, IDE 경고가 사라짐.
+         * 💡 [수정] JSON 블록 내부에 있던 주석(//)을 바깥으로 빼서 ObjectMapper 에러 원천 차단
          */
         String prompt = String.format("""
                 너는 주식 시장 전문 퀀트 투자 AI야. 아래 내 포트폴리오와 내가 만든 거시경제지표와 커스텀지표의 조합인 지수(시나리오)를 결합하여 분석해줘.
@@ -77,9 +75,13 @@ public class AiAnalysisService {
                 [2. 사용자가 설정한 지수 시나리오]
                 %s
 
-                위의 지수 시나리오(환율 하락, 금리 인상,커스텀 지표 등)가 발생했을 때 이 포트폴리오 종목들이 어떻게 반응할지 상관관계를 분석해야 해.
+                위의 지수 시나리오(환율 하락, 금리 인상, 커스텀 지표 등)가 발생했을 때 이 포트폴리오 종목들이 어떻게 반응할지 상관관계를 분석해야 해.
 
-                반드시 아래 형태의 순수 JSON으로만 대답해. ```json 같은 마크다운은 절대 쓰지마.
+                ※ 주의사항: 
+                - radarChart의 'subject'는 제공된 지표명들을 그대로 사용하고, 'portfolio', 'index_avg' 점수만 분석에 맞게 변경할 것.
+                - 반드시 아래 형태의 순수 JSON으로만 대답할 것. 
+                - ```json 같은 마크다운 블록이나 내부 주석(//)은 절대로 쓰지 말 것.
+
                 {
                   "performance": { "return": 15.5, "drawdown": -4.2, "score": 8.5 },
                   "simulationChart": [
@@ -89,7 +91,6 @@ public class AiAnalysisService {
                   ],
                   "recommendation": "해당 거시경제 지표들과 포트폴리오 종목 간의 상관관계를 심층 분석하고, 리밸런싱 전략을 3줄로 작성해줘.",
                   "radarChart": [
-                    // 반드시 아래 제공된 지표명들을 'subject' 축으로 그대로 사용하되, 점수(portfolio, index_avg)는 네 분석에 맞게 바꿔서 반환할 것
                 %s
                   ]
                 }""",
@@ -101,7 +102,7 @@ public class AiAnalysisService {
         try {
             return objectMapper.readValue(jsonResponse, AiSimulationResponseDto.class);
         } catch (Exception e) {
-            log.error("JSON 파싱 실패 (AI가 JSON 형식을 어김): {}", jsonResponse, e);
+            log.error("JSON 파싱 실패 (AI가 JSON 형식을 어김): \n{}", jsonResponse, e);
             throw new RuntimeException("AI 응답을 처리하는 중 오류가 발생했습니다.");
         }
     }
@@ -142,7 +143,8 @@ public class AiAnalysisService {
                         if (part.path("thought").asBoolean(false)) continue;
                         String rawText = part.path("text").textValue();
                         if (rawText != null && !rawText.isBlank()) {
-                            return rawText.replaceAll("```json", "").replaceAll("```", "").trim();
+                            // 프롬프트가 강력해도 만약을 위해 마크다운 잔재를 확실히 제거
+                            return rawText.replace("```json", "").replace("```", "").trim();
                         }
                     }
                 }

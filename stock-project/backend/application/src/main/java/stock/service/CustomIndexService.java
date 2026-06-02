@@ -10,7 +10,6 @@ import stock.repository.CustomIndexRepository;
 import stock.converter.CustomIndexConverter;
 import stock.dto.CustomIndexDto;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -59,7 +58,7 @@ public class CustomIndexService {
     // 지수 생성
     @Transactional
     public CustomIndexDto.Response createIndex(CustomIndexDto.CreateRequest request, Long userId) {
-        validateWeights(request.getComponents());
+        //validateWeights(request.getComponents());
 
         User user = userService.getById(userId);
         CustomIndex index = customIndexConverter.toEntity(request, user);
@@ -69,7 +68,7 @@ public class CustomIndexService {
     // 지수 수정
     @Transactional
     public CustomIndexDto.Response updateIndex(Long indexId, CustomIndexDto.UpdateRequest request, Long userId) {
-        validateWeights(request.getComponents());
+        //validateWeights(request.getComponents());
 
         CustomIndex index = customIndexRepository.findByIdAndUserId(indexId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("지수를 찾을 수 없거나 권한이 없습니다"));
@@ -93,15 +92,15 @@ public class CustomIndexService {
         customIndexRepository.delete(index);
     }
 
-    // 가중치 합계 검증 (100이어야 함)
-    private void validateWeights(List<? extends stock.dto.CustomIndexDto.ComponentRequest> components) {
-        if (components == null || components.isEmpty()) return;
-        BigDecimal total = components.stream()
-                .map(stock.dto.CustomIndexDto.ComponentRequest::getWeight)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        if (total.compareTo(new BigDecimal("100")) != 0) {
-            throw new IllegalArgumentException("지표 가중치 합계는 100이어야 합니다. 현재: " + total);
-        }
-    }
+   // 가중치 합계 검증 (100이어야 함)
+//    private void validateWeights(List<? extends stock.dto.CustomIndexDto.ComponentRequest> components) {
+//        if (components == null || components.isEmpty()) return;
+//        BigDecimal total = components.stream()
+//                .map(stock.dto.CustomIndexDto.ComponentRequest::getWeight)
+//                .reduce(BigDecimal.ZERO, BigDecimal::add);
+//
+//        if (total.compareTo(new BigDecimal("100")) != 0) {
+//            throw new IllegalArgumentException("지표 가중치 합계는 100이어야 합니다. 현재: " + total);
+//        }
+//    }
 }
