@@ -6,7 +6,6 @@ import stock.entity.User;
 import org.springframework.stereotype.Component;
 import stock.dto.CustomIndexDto;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -36,7 +35,7 @@ public class CustomIndexConverter {
                 .customIndex(index)
                 .indicatorType(request.getIndicatorType())
                 .indicatorName(request.getIndicatorName().trim())
-                .weight(BigDecimal.ZERO)
+                //.weight(request.getWeight())
                 .direction(request.getDirection())
                 .description(request.getDescription())
                 .dataSourceCode(request.getDataSourceCode())

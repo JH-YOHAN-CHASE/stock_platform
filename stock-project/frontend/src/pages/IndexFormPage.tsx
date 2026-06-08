@@ -9,188 +9,196 @@ import Card from '../components/common/Card';
 import styles from './FormPage.module.css';
 
 const EMPTY_COMPONENT: IndexComponentForm = {
-  indicatorType: 'INTEREST_RATE',
-  indicatorName: '',
-  weight: 0,
-  direction: 1,
-  description: '',
-  dataSourceCode: '',
+    indicatorType: 'INTEREST_RATE',
+    indicatorName: '',
+    direction: 1,
+    description: '',
+    // 💡 dataSourceCode 삭제됨
 };
 
 export default function IndexFormPage() {
-  const { id } = useParams<{ id: string }>();
-  const isEdit = Boolean(id);
-  const navigate = useNavigate();
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<CustomIndexForm>({
-    name: '', description: '', isPublic: false,
-    components: [{ ...EMPTY_COMPONENT }],
-  });
-
-  useEffect(() => {
-    if (isEdit) {
-      indexApi.getIndex(Number(id)).then((idx) => {
-        setForm({
-          name: idx.name,
-          description: idx.description ?? '',
-          isPublic: idx.isPublic,
-          components: idx.components.map((c) => ({
-            indicatorType: c.indicatorType,
-            indicatorName: c.indicatorName,
-            weight: Number(c.weight),
-            direction: c.direction as 1 | -1,
-            description: c.description ?? '',
-            dataSourceCode: c.dataSourceCode ?? '',
-          })),
-        });
-      });
-    }
-  }, [id]);
-
-  const setField = <K extends keyof CustomIndexForm>(k: K, v: CustomIndexForm[K]) =>
-    setForm((p) => ({ ...p, [k]: v }));
-
-  const setComp = (idx: number, k: keyof IndexComponentForm, v: unknown) =>
-    setForm((p) => {
-      const components = [...p.components];
-      components[idx] = { ...components[idx], [k]: v };
-      return { ...p, components };
+    const { id } = useParams<{ id: string }>();
+    const isEdit = Boolean(id);
+    const navigate = useNavigate();
+    const [saving, setSaving] = useState(false);
+    const [form, setForm] = useState<CustomIndexForm>({
+        name: '', description: '', isPublic: false,
+        components: [{ ...EMPTY_COMPONENT }],
     });
 
-  const addComp = () =>
-    setForm((p) => ({ ...p, components: [...p.components, { ...EMPTY_COMPONENT }] }));
+    useEffect(() => {
+        if (isEdit) {
+            indexApi.getIndex(Number(id)).then((idx) => {
+                setForm({
+                    name: idx.name,
+                    description: idx.description ?? '',
+                    isPublic: idx.isPublic,
+                    components: idx.components.map((c) => ({
+                        indicatorType: c.indicatorType,
+                        indicatorName: c.indicatorName,
+                        direction: c.direction as 1 | -1,
+                        description: c.description ?? '',
+                        // 💡 weight, dataSourceCode 매핑 삭제됨
+                    })),
+                });
+            });
+        }
+    }, [id, isEdit]);
 
-  const removeComp = (idx: number) =>
-    setForm((p) => ({ ...p, components: p.components.filter((_, i) => i !== idx) }));
+    const setField = <K extends keyof CustomIndexForm>(k: K, v: CustomIndexForm[K]) =>
+        setForm((p) => ({ ...p, [k]: v }));
 
-  const handleSubmit = async () => {
-    if (!form.name.trim()) return alert('지수 이름을 입력하세요');
-    setSaving(true);
-    try {
-      if (isEdit) {
-        await indexApi.updateIndex(Number(id), form);
-        navigate(`/indexes/${id}`, { replace: true });
-      } else {
-        const created = await indexApi.createIndex(form);
-        navigate(`/indexes/${created.id}`, { replace: true });
-      }
-    } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      alert(msg || '저장에 실패했습니다');
-    } finally {
-      setSaving(false);
-    }
-  };
+    const setComp = (idx: number, k: keyof IndexComponentForm, v: unknown) =>
+        setForm((p) => {
+            const components = [...p.components];
+            components[idx] = { ...components[idx], [k]: v };
+            return { ...p, components };
+        });
 
-  return (
-    <div>
-      <PageHeader
-        title={isEdit ? '지수 수정' : '나만의 지수 만들기'}
-        subtitle="경제 지표를 조합해 나만의 투자 지수를 설계하세요"
-      />
+    const addComp = () =>
+        setForm((p) => ({ ...p, components: [...p.components, { ...EMPTY_COMPONENT }] }));
 
-      <div className={styles.layout}>
-        {/* 기본 정보 */}
-        <Card>
-          <h3 className={styles.cardTitle}>기본 정보</h3>
-          <div className={styles.field}>
-            <label>지수 이름 *</label>
-            <input className={styles.input} value={form.name} onChange={(e) => setField('name', e.target.value)} placeholder="예: 나만의 경기침체 지수" />
-          </div>
-          <div className={styles.field}>
-            <label>설명</label>
-            <textarea className={styles.textarea} value={form.description} onChange={(e) => setField('description', e.target.value)} placeholder="이 지수가 무엇을 측정하는지 설명하세요" rows={3} />
-          </div>
-          <div className={styles.toggleField}>
-            <label>공개 여부</label>
-            <div className={styles.toggle} onClick={() => setField('isPublic', !form.isPublic)}>
-              <div className={`${styles.toggleTrack} ${form.isPublic ? styles.toggleOn : ''}`}>
-                <div className={styles.toggleThumb} />
-              </div>
-              <span>{form.isPublic ? '공개 (다른 사람이 볼 수 있음)' : '비공개'}</span>
-            </div>
-          </div>
-        </Card>
+    const removeComp = (idx: number) =>
+        setForm((p) => ({ ...p, components: p.components.filter((_, i) => i !== idx) }));
 
-        {/* 지표 구성 */}
-        <Card>
-          <div className={styles.cardTitleRow}>
-            <h3 className={styles.cardTitle}>지표 구성</h3>
-            <Button variant="secondary" size="sm" onClick={addComp}>＋ 지표 추가</Button>
-          </div>
+    // 💡 totalWeight, weightOk 계산 로직 삭제됨
 
-          {form.components.map((comp, idx) => (
-            <div key={idx} className={styles.componentRow}>
-              <div className={styles.componentHeader}>
-                <span className={styles.componentIndex}>지표 #{idx + 1}</span>
-                {form.components.length > 1 && (
-                  <button className={styles.removeBtn} onClick={() => removeComp(idx)}>✕</button>
-                )}
-              </div>
-              <div className={styles.componentGrid}>
-                <div className={styles.field}>
-                  <label>지표 유형 *</label>
-                  <select
-                    className={styles.select}
-                    value={comp.indicatorType}
-                    onChange={(e) => {
-                      const t = e.target.value as IndicatorType;
-                      setComp(idx, 'indicatorType', t);
-                      if (t !== 'CUSTOM') setComp(idx, 'indicatorName', INDICATOR_LABELS[t]);
-                    }}
-                  >
-                    {(Object.keys(INDICATOR_LABELS) as IndicatorType[]).map((k) => (
-                      <option key={k} value={k}>{INDICATOR_LABELS[k]}</option>
+    const handleSubmit = async () => {
+        if (!form.name.trim()) return alert('지수 이름을 입력하세요');
+        // 💡 가중치 100% 검증 로직 삭제됨
+
+        setSaving(true);
+        try {
+            if (isEdit) {
+                await indexApi.updateIndex(Number(id), form);
+                navigate(`/indexes/${id}`, { replace: true });
+            } else {
+                const created = await indexApi.createIndex(form);
+                navigate(`/indexes/${created.id}`, { replace: true });
+            }
+        } catch (e: unknown) {
+            const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+            alert(msg || '저장에 실패했습니다');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div>
+            <PageHeader
+                title={isEdit ? '지수 수정' : '나만의 지수 만들기'}
+                subtitle="경제 지표를 조합해 나만의 투자 지수를 설계하세요"
+            />
+
+            <div className={styles.layout}>
+                {/* 기본 정보 */}
+                <Card>
+                    <h3 className={styles.cardTitle}>기본 정보</h3>
+                    <div className={styles.field}>
+                        <label>지수 이름 *</label>
+                        <input className={styles.input} value={form.name} onChange={(e) => setField('name', e.target.value)} placeholder="예: 나만의 경기침체 지수" />
+                    </div>
+                    <div className={styles.field}>
+                        <label>설명</label>
+                        <textarea className={styles.textarea} value={form.description} onChange={(e) => setField('description', e.target.value)} placeholder="이 지수가 무엇을 측정하는지 설명하세요" rows={3} />
+                    </div>
+                    <div className={styles.toggleField}>
+                        <label>공개 여부</label>
+                        <div className={styles.toggle} onClick={() => setField('isPublic', !form.isPublic)}>
+                            <div className={`${styles.toggleTrack} ${form.isPublic ? styles.toggleOn : ''}`}>
+                                <div className={styles.toggleThumb} />
+                            </div>
+                            <span>{form.isPublic ? '공개 (다른 사람이 볼 수 있음)' : '비공개'}</span>
+                        </div>
+                    </div>
+                </Card>
+
+                {/* 지표 구성 */}
+                <Card>
+                    <div className={styles.cardTitleRow}>
+                        <h3 className={styles.cardTitle}>지표 구성</h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            {/* 💡 가중치 합계 텍스트 삭제됨 */}
+                            <Button variant="secondary" size="sm" onClick={addComp}>＋ 지표 추가</Button>
+                        </div>
+                    </div>
+
+                    {/* 💡 전체 가중치 바(weightBar) UI 삭제됨 */}
+
+                    {form.components.map((comp, idx) => (
+                        <div key={idx} className={styles.componentRow}>
+                            <div className={styles.componentHeader}>
+                                <span className={styles.componentIndex}>지표 #{idx + 1}</span>
+                                {form.components.length > 1 && (
+                                    <button className={styles.removeBtn} onClick={() => removeComp(idx)}>✕</button>
+                                )}
+                            </div>
+                            <div className={styles.componentGrid}>
+                                <div className={styles.field}>
+                                    <label>지표 유형 *</label>
+                                    <select
+                                        className={styles.select}
+                                        value={comp.indicatorType}
+                                        onChange={(e) => {
+                                            const t = e.target.value as IndicatorType;
+                                            setComp(idx, 'indicatorType', t);
+                                            if (t !== 'CUSTOM') setComp(idx, 'indicatorName', INDICATOR_LABELS[t]);
+                                        }}
+                                    >
+                                        {(Object.keys(INDICATOR_LABELS) as IndicatorType[]).map((k) => (
+                                            <option key={k} value={k}>{INDICATOR_LABELS[k]}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className={styles.field}>
+                                    <label>지표명 *</label>
+                                    <input
+                                        className={styles.input}
+                                        value={comp.indicatorName}
+                                        onChange={(e) => setComp(idx, 'indicatorName', e.target.value)}
+                                        placeholder="예: 미국 기준금리"
+                                    />
+                                </div>
+                                <div className={styles.field}>
+                                    <label>상관 방향 *</label>
+                                    <div className={styles.directionGroup}>
+                                        <button
+                                            className={`${styles.dirBtn} ${styles.dirBtnPos} ${comp.direction === 1 ? styles.active : ''}`}
+                                            onClick={() => setComp(idx, 'direction', 1)}
+                                            type="button"
+                                        >↑ 상승</button>
+                                        <button
+                                            className={`${styles.dirBtn} ${styles.dirBtnNeg} ${comp.direction === -1 ? styles.active : ''}`}
+                                            onClick={() => setComp(idx, 'direction', -1)}
+                                            type="button"
+                                        >↓ 하락</button>
+                                    </div>
+                                </div>
+                                <div className={styles.field}>
+                                    <label>설명</label>
+                                    <input
+                                        className={styles.input}
+                                        value={comp.description}
+                                        onChange={(e) => setComp(idx, 'description', e.target.value)}
+                                        placeholder="이 지표의 역할"
+                                    />
+                                </div>
+                                {/* 💡 데이터 소스 코드 입력란 삭제됨 */}
+                            </div>
+                        </div>
                     ))}
-                  </select>
-                </div>
-                <div className={styles.field}>
-                  <label>지표명 *</label>
-                  <input
-                    className={styles.input}
-                    value={comp.indicatorName}
-                    onChange={(e) => setComp(idx, 'indicatorName', e.target.value)}
-                    placeholder={comp.indicatorType === 'CUSTOM' ? '지표명을 입력하세요' : '지표 유형에서 자동 설정됩니다'}
-                    disabled={comp.indicatorType !== 'CUSTOM'}
-                  />
-                </div>
-                <div className={styles.field}>
-                  <label>방향성 *</label>
-                  <div className={styles.directionGroup}>
-                    <button
-                      className={`${styles.dirBtn} ${styles.dirBtnPos} ${comp.direction === 1 ? styles.active : ''}`}
-                      onClick={() => setComp(idx, 'direction', 1)}
-                      type="button"
-                    >↑ 상승</button>
-                    <button
-                      className={`${styles.dirBtn} ${styles.dirBtnNeg} ${comp.direction === -1 ? styles.active : ''}`}
-                      onClick={() => setComp(idx, 'direction', -1)}
-                      type="button"
-                    >↓ 하락</button>
-                  </div>
-                </div>
-                <div className={styles.field}>
-                  <label>설명</label>
-                  <input
-                    className={styles.input}
-                    value={comp.description}
-                    onChange={(e) => setComp(idx, 'description', e.target.value)}
-                    placeholder="이 지표의 역할"
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
-        </Card>
+                </Card>
 
-        {/* 저장 버튼 */}
-        <div className={styles.actions}>
-          <Button variant="secondary" onClick={() => navigate(-1)}>취소</Button>
-          <Button onClick={handleSubmit} loading={saving}>
-            {isEdit ? '저장' : '지수 생성'}
-          </Button>
+                {/* 저장 버튼 */}
+                <div className={styles.actions}>
+                    <Button variant="secondary" onClick={() => navigate(-1)}>취소</Button>
+                    {/* 💡 disabled={!weightOk} 조건 삭제됨 */}
+                    <Button onClick={handleSubmit} loading={saving}>
+                        {isEdit ? '저장' : '지수 생성'}
+                    </Button>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 }

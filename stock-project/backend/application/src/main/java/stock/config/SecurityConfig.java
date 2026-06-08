@@ -68,7 +68,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         // 프론트엔드 + 백엔드 자기 자신도 허용 (OAuth 리다이렉트 대응)
-        config.setAllowedOrigins(List.of(frontendHost, "http://localhost:8083"));
+        config.setAllowedOrigins(List.of(frontendHost, "http://54.116.11.250:8083"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);

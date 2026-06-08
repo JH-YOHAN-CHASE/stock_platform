@@ -18,10 +18,10 @@ public class CustomIndexDto {
     @NoArgsConstructor
     public static class CreateRequest {
         @NotBlank(message = "지수 이름은 필수입니다")
-        @Size(max = 50, message = "이름은 50자 이내")
+        @Size(max = 10, message = "지수 이름은 1자이상 10자이하로 해주세요")
         private String name;
 
-        @Size(max = 300, message = "설명은 300자 이내")
+        @Size(max = 80, message = "설명은 80자 이내")
         private String description;
 
         @JsonProperty("isPublic")
@@ -36,10 +36,10 @@ public class CustomIndexDto {
     @NoArgsConstructor
     public static class UpdateRequest {
         @NotBlank
-        @Size(max = 50)
+        @Size(max = 10)
         private String name;
 
-        @Size(max = 300)
+        @Size(max = 80)
         private String description;
 
         @JsonProperty("isPublic")
@@ -67,7 +67,7 @@ public class CustomIndexDto {
         @NotNull
         private Integer direction;  // 1 or -1
 
-        @Size(max = 200)
+        @Size(max = 80)
         private String description;
 
         private String dataSourceCode;

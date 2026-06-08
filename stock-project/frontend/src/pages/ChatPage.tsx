@@ -53,7 +53,7 @@ const ChatPage: React.FC = () => {
 
         // 웹소켓 연결
         const client = new Client({
-            brokerURL: 'ws://localhost:8083/ws-chat',
+            brokerURL: 'ws://54.116.11.250:8083/ws-chat',
             reconnectDelay: 5000,
             heartbeatIncoming: 4000,
             heartbeatOutgoing: 4000,
