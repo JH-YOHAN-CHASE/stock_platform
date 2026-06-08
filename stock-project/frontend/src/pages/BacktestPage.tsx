@@ -54,9 +54,16 @@ export default function BacktestPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    portfolioApi.getMyPortfolios().then(list => {
-      setPortfolios(list);
-      if (list.length > 0) setPortfolioId(list[0].id);
+    Promise.all([
+      portfolioApi.getMyPortfolios(),
+      portfolioApi.getPublicPortfolios(),
+    ]).then(([mine, pub]) => {
+      const merged = [
+        ...mine.map(p => ({ ...p, _group: '내 포트폴리오' })),
+        ...pub.filter(p => !mine.some(m => m.id === p.id)).map(p => ({ ...p, _group: '공개 포트폴리오' })),
+      ];
+      setPortfolios(merged);
+      if (merged.length > 0) setPortfolioId(merged[0].id);
     });
   }, []);
 
@@ -99,9 +106,17 @@ export default function BacktestPage() {
               onChange={e => setPortfolioId(Number(e.target.value))}
             >
               {portfolios.length === 0 && <option value="">포트폴리오 없음</option>}
-              {portfolios.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
+              {['내 포트폴리오', '공개 포트폴리오'].map(group => {
+                const items = (portfolios as any[]).filter(p => p._group === group);
+                if (items.length === 0) return null;
+                return (
+                  <optgroup key={group} label={group}>
+                    {items.map((p: any) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </optgroup>
+                );
+              })}
             </select>
           </div>
 

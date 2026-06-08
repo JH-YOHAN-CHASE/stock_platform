@@ -25,7 +25,16 @@ export default function PortfolioComparePage() {
     const [rebalancing, setRebalancing] = useState<'NONE' | 'QUARTERLY' | 'ANNUALLY'>('NONE');
 
     useEffect(() => {
-        portfolioApi.getMyPortfolios().then(setList).catch(() => setList([]));
+        Promise.all([
+            portfolioApi.getMyPortfolios().catch(() => []),
+            portfolioApi.getPublicPortfolios().catch(() => []),
+        ]).then(([mine, pub]) => {
+            const merged = [
+                ...mine.map(p => ({ ...p, _group: '내 포트폴리오' })),
+                ...pub.filter(p => !mine.some(m => m.id === p.id)).map(p => ({ ...p, _group: '공개' })),
+            ];
+            setList(merged as any);
+        });
     }, []);
 
     const toggle = (id: number) => {
@@ -108,7 +117,7 @@ export default function PortfolioComparePage() {
                                         className={`${styles.listItem} ${isSelected ? styles.listItemSelected : ''}`}
                                         style={{ backgroundColor: isSelected ? 'var(--primary-light, rgba(59,130,246,0.1))' : '' }}
                                     >
-                                        <div className={styles.listItemName}>{p.name}</div>
+                                        <div className={styles.listItemName}>{p.name}{(p as any)._group === '공개' && <span style={{ fontSize: 10, marginLeft: 6, color: 'var(--accent2)' }}>공개</span>}</div>
                                         <div className={styles.listItemMeta}>종목 {p.itemCount}개</div>
                                     </div>
                                 );

@@ -26,10 +26,20 @@ export default function AiExperimentPage() {
     useEffect(() => {
         Promise.all([
             portfolioApi.getMyPortfolios().catch(() => []),
-            indexApi.getMyIndexes().catch(() => [])
-        ]).then(([p, i]) => {
-            setPortfolios(p || []);
-            setIndexes(i || []);
+            portfolioApi.getPublicPortfolios().catch(() => []),
+            indexApi.getMyIndexes().catch(() => []),
+            indexApi.getPublicIndexes().catch(() => []),
+        ]).then(([myP, pubP, myI, pubI]) => {
+            const mergedP = [
+                ...myP.map(p => ({ ...p, _group: '내 포트폴리오' })),
+                ...pubP.filter(p => !myP.some(m => m.id === p.id)).map(p => ({ ...p, _group: '공개' })),
+            ];
+            const mergedI = [
+                ...myI.map(i => ({ ...i, _group: '내 지수' })),
+                ...pubI.filter(i => !myI.some(m => m.id === i.id)).map(i => ({ ...i, _group: '공개' })),
+            ];
+            setPortfolios(mergedP as any);
+            setIndexes(mergedI as any);
         });
     }, []);
 
@@ -85,7 +95,7 @@ export default function AiExperimentPage() {
                                         {selectedPId === p.id && <div className={styles.radioThumb} />}
                                     </div>
                                     <div>
-                                        <div className={styles.listItemName}>{p.name}</div>
+                                        <div className={styles.listItemName}>{p.name}{(p as any)._group === '공개' && <span style={{ fontSize: 10, marginLeft: 6, color: 'var(--accent2)' }}>공개</span>}</div>
                                         <div className={styles.listItemMeta}>종목 {p.itemCount}개</div>
                                     </div>
                                 </div>
@@ -106,7 +116,7 @@ export default function AiExperimentPage() {
                                         {selectedIId === idx.id && <div className={styles.radioThumb} />}
                                     </div>
                                     <div>
-                                        <div className={styles.listItemName}>{idx.name}</div>
+                                        <div className={styles.listItemName}>{idx.name}{(idx as any)._group === '공개' && <span style={{ fontSize: 10, marginLeft: 6, color: 'var(--accent2)' }}>공개</span>}</div>
                                         <div className={styles.listItemMeta}>지표 {idx.componentCount}개</div>
                                     </div>
                                 </div>
