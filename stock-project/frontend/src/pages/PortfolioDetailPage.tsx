@@ -33,7 +33,7 @@ export default function PortfolioDetailPage() {
     if (loading) return <div className={styles.center}><div className="spinner" /></div>;
     if (!portfolio) return <div className={styles.center}>포트폴리오를 찾을 수 없습니다</div>;
 
-    // ⭐ 현재 접속한 유저가 포트폴리오의 주인인지 확인
+    // 현재 접속한 유저가 포트폴리오의 주인인지 확인
     const isOwner = user?.id === portfolio.userId;
 
     const isKorean = (ticker: string) => !/^[A-Za-z]{1,6}$/.test(ticker);
@@ -50,14 +50,16 @@ export default function PortfolioDetailPage() {
     const calcWeight = (item: typeof portfolio.items[0]) =>
         totalValue > 0 ? (item.quantity * evalPrice(item)) / totalValue * 100 : 0;
 
-    const costBasis = portfolio.items.reduce((sum, item) => sum + item.quantity * item.avgBuyPrice, 0);
-    const returnRate = costBasis > 0 ? (totalValue - costBasis) / costBasis * 100 : 0;
-
+    // 파이 차트용 데이터
     const pieData = portfolio.items.map((item, i) => ({
         name: displayName(item),
         value: item.quantity * evalPrice(item),
+        weight: calcWeight(item),
         color: COLORS[i % COLORS.length],
     }));
+
+    const costBasis = portfolio.items.reduce((sum, item) => sum + item.quantity * item.avgBuyPrice, 0);
+    const returnRate = costBasis > 0 ? (totalValue - costBasis) / costBasis * 100 : 0;
 
     return (
         <div>
@@ -86,7 +88,7 @@ export default function PortfolioDetailPage() {
                     ) : (
                         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <span style={{ fontSize: '0.85rem', color: 'var(--text2)' }}>
-                👀 타인의 포트폴리오는 종목만 조회됩니다.
+                👀 타인의 포트폴리오는 종목, 비중, 수익률만 조회됩니다.
               </span>
                             <Button variant="secondary" size="sm" onClick={() => navigate('/portfolios/compare')}>비교하기</Button>
                         </div>
@@ -94,7 +96,7 @@ export default function PortfolioDetailPage() {
                 }
             />
 
-            {/* 요약 카드: 주인이 아닐 경우 금액 정보 비공개 처리 */}
+            {/* 요약 카드 */}
             <div className={styles.summaryGrid}>
                 <Card>
                     <div className={styles.summaryLabel}>총 종목</div>
@@ -106,12 +108,15 @@ export default function PortfolioDetailPage() {
                         {isOwner ? <>{totalValue.toLocaleString()}<span className={styles.summaryUnit}>원</span></> : '비공개'}
                     </div>
                 </Card>
+
+                {/* ⭐ 수익률 카드는 주인 유무 상관없이 모두에게 노출되도록 조건문 제거 */}
                 <Card>
                     <div className={styles.summaryLabel}>수익률</div>
-                    <div className={styles.summaryValue} style={{ fontSize: 20, color: isOwner ? (returnRate >= 0 ? 'var(--green)' : 'var(--red, #ef4444)') : 'var(--text3)' }}>
-                        {isOwner ? <>{returnRate >= 0 ? '+' : ''}{returnRate.toFixed(2)}<span className={styles.summaryUnit}>%</span></> : '비공개'}
+                    <div className={styles.summaryValue} style={{ fontSize: 20, color: returnRate >= 0 ? 'var(--green)' : 'var(--red, #ef4444)' }}>
+                        {returnRate >= 0 ? '+' : ''}{returnRate.toFixed(2)}<span className={styles.summaryUnit}>%</span>
                     </div>
                 </Card>
+
                 <Card>
                     <div className={styles.summaryLabel}>소유자</div>
                     <div className={styles.summaryValue} style={{ fontSize: 18 }}>{portfolio.userName}</div>
@@ -119,8 +124,8 @@ export default function PortfolioDetailPage() {
             </div>
 
             <div className={styles.body}>
-                {/* 파이차트: 자산 비중이 노출되므로 주인에게만 보여줍니다. */}
-                {isOwner && portfolio.items.length > 0 && (
+                {/* 파이차트 */}
+                {portfolio.items.length > 0 && (
                     <Card className={styles.chartCard}>
                         <h3 className={styles.chartTitle}>종목 구성</h3>
                         <ResponsiveContainer width="100%" height={260}>
@@ -140,13 +145,21 @@ export default function PortfolioDetailPage() {
                                         <Cell key={i} fill={entry.color} />
                                     ))}
                                 </Pie>
-                                <Tooltip formatter={(val: number) => [val.toLocaleString('ko-KR') + ' 원', '평가금액']} />
+                                <Tooltip
+                                    formatter={(val: number, name: string, props: any) => {
+                                        if (isOwner) {
+                                            return [val.toLocaleString('ko-KR') + ' 원', '평가금액'];
+                                        } else {
+                                            return [`${props.payload.weight.toFixed(2)}%`, '비중'];
+                                        }
+                                    }}
+                                />
                             </PieChart>
                         </ResponsiveContainer>
                     </Card>
                 )}
 
-                {/* 종목 테이블: 주인이 아니면 '수량', '단가' 등을 숨기고 종목명만 보여줍니다. */}
+                {/* 종목 테이블 */}
                 <Card className={styles.tableCard}>
                     <h3 className={styles.chartTitle}>종목 목록</h3>
                     <div className={styles.tableWrapper}>
@@ -159,10 +172,10 @@ export default function PortfolioDetailPage() {
                                         <th>수량</th>
                                         <th>평균단가</th>
                                         <th>평가금액</th>
-                                        <th>비중</th>
-                                        <th>매수일</th>
                                     </>
                                 )}
+                                <th>비중</th>
+                                {isOwner && <th>매수일</th>}
                             </tr>
                             </thead>
                             <tbody>
@@ -178,10 +191,10 @@ export default function PortfolioDetailPage() {
                                             <td className="mono">{item.quantity.toLocaleString()}</td>
                                             <td className="mono">{item.avgBuyPrice.toLocaleString('ko-KR')} 원</td>
                                             <td className="mono">{(item.quantity * evalPrice(item)).toLocaleString('ko-KR')} 원</td>
-                                            <td>{totalValue > 0 ? `${calcWeight(item).toFixed(2)}%` : '—'}</td>
-                                            <td className={styles.date}>{item.purchaseDate ?? '—'}</td>
                                         </>
                                     )}
+                                    <td>{totalValue > 0 ? `${calcWeight(item).toFixed(2)}%` : '—'}</td>
+                                    {isOwner && <td className={styles.date}>{item.purchaseDate ?? '—'}</td>}
                                 </tr>
                             ))}
                             </tbody>
