@@ -52,7 +52,6 @@ public class AiAnalysisService {
         // 2. 지수(Index) 구성 지표들 가져오기
         CustomIndexDto.Response indexData = customIndexService.getIndex(indexId, userId);
 
-        // 💡 [수정] 가중치를 제거했으므로 포맷팅 문자열에서도 가중치를 삭제하고 방향을 한글로 치환
         String indexDetails = indexData.getComponents().stream()
                 .map(c -> String.format("- %s (방향: %s)",
                         c.getIndicatorName(), c.getDirection() == 1 ? "양의 상관" : "음의 상관"))
@@ -64,23 +63,21 @@ public class AiAnalysisService {
                 .collect(Collectors.joining(",\n"));
 
         /*
-         * 💡 [수정] JSON 블록 내부에 있던 주석(//)을 바깥으로 빼서 ObjectMapper 에러 원천 차단
+         * 💡 [최적화 완료] 무료 버전 Gemini를 위해 요구사항과 출력 글자 수를 대폭 줄임
          */
         String prompt = String.format("""
-                너는 주식 시장 전문 퀀트 투자 AI야. 아래 내 포트폴리오와 내가 만든 거시경제지표와 커스텀지표의 조합인 지수(시나리오)를 결합하여 분석해줘.
+                너는 퀀트 투자 AI야. 아래 포트폴리오와 지수(시나리오)를 분석해.
 
-                [1. 분석 대상 포트폴리오 (총액: %s원)]
+                [포트폴리오 총액: %s원]
                 %s
 
-                [2. 사용자가 설정한 지수 시나리오]
+                [지수 시나리오]
                 %s
 
-                위의 지수 시나리오(환율 하락, 금리 인상, 커스텀 지표 등)가 발생했을 때 이 포트폴리오 종목들이 어떻게 반응할지 상관관계를 분석해야 해.
-
-                ※ 주의사항:
-                - radarChart의 'subject'는 제공된 지표명들을 그대로 사용하고, 'portfolio', 'index_avg' 점수만 분석에 맞게 변경할 것.
-                - 반드시 아래 형태의 순수 JSON으로만 대답할 것.
-                - ```json 같은 마크다운 블록이나 내부 주석(//)은 절대로 쓰지 말 것.
+                ※ 엄격한 규칙:
+                1. 오직 아래 형태의 순수 JSON만 출력할 것. 다른 말은 절대 금지.
+                2. recommendation은 반드시 "1줄(50자 이내)"로 아주 짧게 핵심만 요약할 것.
+                3. radarChart의 'subject'는 제공된 지표명 유지, 점수만 변경.
 
                 {
                   "performance": { "return": 15.5, "drawdown": -4.2, "score": 8.5 },
@@ -89,7 +86,7 @@ public class AiAnalysisService {
                     { "period": "6개월", "value": 8.2 },
                     { "period": "1년", "value": 15.5 }
                   ],
-                  "recommendation": "해당 거시경제 지표들과 포트폴리오 종목 간의 상관관계를 심층 분석하고, 리밸런싱 전략을 3줄로 작성해줘.",
+                  "recommendation": "금리 인상기 방어주 비중 확대 권장",
                   "radarChart": [
                 %s
                   ]
@@ -99,11 +96,31 @@ public class AiAnalysisService {
 
         String jsonResponse = callGeminiApi(prompt);
 
+        // 🚨 [강력 청소기 가동] 무료 버전 제미나이의 예측 불허 텍스트 완벽 방어
+        if (jsonResponse != null) {
+            // 혹시 남아있을지 모르는 마크다운 블록과 역따옴표 전체 제거
+            jsonResponse = jsonResponse.replaceAll("```json", "")
+                    .replaceAll("```", "")
+                    .replaceAll("`", "")
+                    .trim();
+
+            // 앞뒤로 붙은 AI의 불필요한 인사말, 설명글을 완전히 걷어내기 위해 { 와 }의 위치 추적
+            int startIndex = jsonResponse.indexOf("{");
+            int endIndex = jsonResponse.lastIndexOf("}");
+
+            if (startIndex != -1 && endIndex != -1 && startIndex < endIndex) {
+                // 정확히 오리지널 JSON 데이터 바디 { ... } 구간만 칼같이 슬라이싱
+                jsonResponse = jsonResponse.substring(startIndex, endIndex + 1);
+            }
+        }
+
         try {
+            // 정제 및 전처리가 완벽히 끝난 문자열로 DTO 변환(파싱) 진행
             return objectMapper.readValue(jsonResponse, AiSimulationResponseDto.class);
         } catch (Exception e) {
-            log.error("JSON 파싱 실패 (AI가 JSON 형식을 어김): \n{}", jsonResponse, e);
-            throw new RuntimeException("AI 응답을 처리하는 중 오류가 발생했습니다.");
+            // 만약 여기서 에러가 난다면, 제미나이가 중괄호 내부 문법(쉼표 누락 등) 자체를 깨뜨린 경우입니다.
+            log.error("무료 버전 Gemini의 JSON 규격 위반 (구조 결함): \n{}", jsonResponse, e);
+            throw new RuntimeException("AI가 올바른 형식의 응답을 생성하지 못했습니다. 다시 시도해 주세요.");
         }
     }
 
