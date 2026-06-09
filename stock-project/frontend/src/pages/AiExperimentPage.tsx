@@ -1,8 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-    LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
-    RadarChart, Radar, PolarGrid, PolarAngleAxis
-} from 'recharts';
+import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { portfolioApi } from '../api/portfolio';
 import { indexApi } from '../api/index';
 import { aiApi } from '../api/ai';
@@ -12,17 +9,37 @@ import Card from '../components/common/Card';
 import Button from '../components/common/Button';
 import styles from './AiExperimentPage.module.css';
 
+// ---------------------------------------------------------------------------
+// 1. 타입 정의 (any 제거)
+// ---------------------------------------------------------------------------
+interface GroupedItem {
+    id: number;
+    name: string;
+    count: number;
+    group: '내 포트폴리오' | '내 지수' | '공개';
+}
+
+interface AiSimulationResult {
+    performance?: { return: number; drawdown: number; score: number };
+    simulationChart?: { period: string; value: number }[];
+    radarChart?: { subject: string; portfolio: number; index_avg: number }[];
+    recommendation?: string;
+}
+
+// ---------------------------------------------------------------------------
+// 2. 메인 페이지 컴포넌트
+// ---------------------------------------------------------------------------
 export default function AiExperimentPage() {
-    const [portfolios, setPortfolios] = useState<PortfolioSummary[]>([]);
-    const [indexes, setIndexes] = useState<CustomIndexSummary[]>([]);
+    const [portfolios, setPortfolios] = useState<GroupedItem[]>([]);
+    const [indexes, setIndexes] = useState<GroupedItem[]>([]);
 
     const [selectedPId, setSelectedPId] = useState<number | null>(null);
     const [selectedIId, setSelectedIId] = useState<number | null>(null);
 
-    // 타입을 any로 임시 지정하여 타입 에러를 우회합니다.
-    const [result, setResult] = useState<any>(null);
+    const [result, setResult] = useState<AiSimulationResult | null>(null);
     const [loading, setLoading] = useState(false);
 
+    // 데이터 패칭 로직
     useEffect(() => {
         Promise.all([
             portfolioApi.getMyPortfolios().catch(() => []),
@@ -30,19 +47,20 @@ export default function AiExperimentPage() {
             indexApi.getMyIndexes().catch(() => []),
             indexApi.getPublicIndexes().catch(() => []),
         ]).then(([myP, pubP, myI, pubI]) => {
-            const mergedP = [
-                ...myP.map(p => ({ ...p, _group: '내 포트폴리오' })),
-                ...pubP.filter(p => !myP.some(m => m.id === p.id)).map(p => ({ ...p, _group: '공개' })),
-            ];
-            const mergedI = [
-                ...myI.map(i => ({ ...i, _group: '내 지수' })),
-                ...pubI.filter(i => !myI.some(m => m.id === i.id)).map(i => ({ ...i, _group: '공개' })),
-            ];
-            setPortfolios(mergedP as any);
-            setIndexes(mergedI as any);
+            setPortfolios([
+                ...myP.map(p => ({ id: p.id, name: p.name, count: p.itemCount, group: '내 포트폴리오' as const })),
+                ...pubP.filter(p => !myP.some(m => m.id === p.id))
+                    .map(p => ({ id: p.id, name: p.name, count: p.itemCount, group: '공개' as const })),
+            ]);
+            setIndexes([
+                ...myI.map(i => ({ id: i.id, name: i.name, count: i.componentCount, group: '내 지수' as const })),
+                ...pubI.filter(i => !myI.some(m => m.id === i.id))
+                    .map(i => ({ id: i.id, name: i.name, count: i.componentCount, group: '공개' as const })),
+            ]);
         });
     }, []);
 
+    // 시뮬레이션 실행 핸들러
     const handleRunExperiment = async () => {
         if (!selectedPId || !selectedIId) return;
 
@@ -51,9 +69,7 @@ export default function AiExperimentPage() {
 
         try {
             const data = await aiApi.runAiSimulation(selectedPId, selectedIId);
-            // 💡 브라우저 콘솔에서 실제 데이터 구조를 확인해 보세요!
-            console.log("서버 응답 데이터:", data);
-            setResult(data || {}); // data가 없어도 빈 객체를 넣어 에러 방지
+            setResult(data || {});
         } catch (error) {
             console.error("Simulation Error:", error);
             alert("AI 시뮬레이션 서버와 통신 중 오류가 발생했습니다.");
@@ -61,15 +77,6 @@ export default function AiExperimentPage() {
             setLoading(false);
         }
     };
-
-    // 💡 [핵심 방어 코드] 렌더링 중에 에러가 나지 않도록 사전에 안전하게 값을 추출합니다.
-    const isSuccess = !!result;
-    const perfReturn = result?.performance?.return || 0;
-    const perfDrawdown = result?.performance?.drawdown || 0;
-    const perfScore = result?.performance?.score || 0;
-    const simulationChartData = result?.simulationChart || [];
-    const radarChartData = result?.radarChart || [];
-    const recommendationText = result?.recommendation || "분석 결과가 제공되지 않았습니다. (서버 응답 확인 필요)";
 
     return (
         <div style={{ padding: '20px' }}>
@@ -83,45 +90,24 @@ export default function AiExperimentPage() {
                             실험 설정 <span className={styles.badge}>Beta</span>
                         </div>
 
-                        <div className={styles.sectionHeader}>1. 포트폴리오 선택</div>
-                        <div className={styles.list}>
-                            {portfolios.map(p => (
-                                <div
-                                    key={p.id}
-                                    className={`${styles.listItem} ${selectedPId === p.id ? styles.listItemSelected : ''}`}
-                                    onClick={() => setSelectedPId(p.id)}
-                                >
-                                    <div className={`${styles.listItemRadio} ${selectedPId === p.id ? styles.listItemRadioSelected : ''}`}>
-                                        {selectedPId === p.id && <div className={styles.radioThumb} />}
-                                    </div>
-                                    <div>
-                                        <div className={styles.listItemName}>{p.name}{(p as any)._group === '공개' && <span style={{ fontSize: 10, marginLeft: 6, color: 'var(--accent2)' }}>공개</span>}</div>
-                                        <div className={styles.listItemMeta}>종목 {p.itemCount}개</div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                        {/* 중복 제거된 리스트 컴포넌트 사용 */}
+                        <SelectionList
+                            title="1. 포트폴리오 선택"
+                            items={portfolios}
+                            selectedId={selectedPId}
+                            onSelect={setSelectedPId}
+                            unit="종목"
+                        />
 
                         <div className={styles.divider} />
 
-                        <div className={styles.sectionHeader}>2. 결합 지수 선택</div>
-                        <div className={styles.list}>
-                            {indexes.map(idx => (
-                                <div
-                                    key={idx.id}
-                                    className={`${styles.listItem} ${selectedIId === idx.id ? styles.listItemSelected : ''}`}
-                                    onClick={() => setSelectedIId(idx.id)}
-                                >
-                                    <div className={`${styles.listItemRadio} ${selectedIId === idx.id ? styles.listItemRadioSelected : ''}`}>
-                                        {selectedIId === idx.id && <div className={styles.radioThumb} />}
-                                    </div>
-                                    <div>
-                                        <div className={styles.listItemName}>{idx.name}{(idx as any)._group === '공개' && <span style={{ fontSize: 10, marginLeft: 6, color: 'var(--accent2)' }}>공개</span>}</div>
-                                        <div className={styles.listItemMeta}>지표 {idx.componentCount}개</div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                        <SelectionList
+                            title="2. 결합 지수 선택"
+                            items={indexes}
+                            selectedId={selectedIId}
+                            onSelect={setSelectedIId}
+                            unit="지표"
+                        />
 
                         <Button
                             style={{ width: '100%', marginTop: '20px' }}
@@ -136,75 +122,8 @@ export default function AiExperimentPage() {
 
                 {/* ─── 오른쪽: 분석 결과 대시보드 ─── */}
                 <div>
-                    {isSuccess ? (
-                        <div>
-                            {/* 상단 요약 3칸 */}
-                            <div className={styles.summaryGrid} style={{ marginBottom: '24px' }}>
-                                <Card>
-                                    <div className={styles.summaryItem}>
-                                        <div className={styles.summaryLabel}>예상 수익률 (12M)</div>
-                                        <div className={styles.summaryValue} style={{ color: '#3b82f6' }}>
-                                            {perfReturn > 0 ? '+' : ''}{perfReturn}%
-                                        </div>
-                                    </div>
-                                </Card>
-                                <Card>
-                                    <div className={styles.summaryItem}>
-                                        <div className={styles.summaryLabel}>최대 낙폭 (MDD)</div>
-                                        <div className={styles.summaryValue} style={{ color: '#ef4444' }}>
-                                            {perfDrawdown}%
-                                        </div>
-                                    </div>
-                                </Card>
-                                <Card>
-                                    <div className={styles.summaryItem}>
-                                        <div className={styles.summaryLabel}>AI 스코어</div>
-                                        <div className={styles.summaryValue}>
-                                            {perfScore} / 10
-                                        </div>
-                                    </div>
-                                </Card>
-                            </div>
-
-                            {/* 메인 라인 차트 */}
-                            <Card title="미래 성과 시뮬레이션 (3개월 ~ 1년)">
-                                <div style={{ width: '100%', height: 350 }}>
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <LineChart data={simulationChartData}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#2a3a52" />
-                                            <XAxis dataKey="period" stroke="#8b9eb7" />
-                                            <YAxis unit="%" stroke="#8b9eb7" />
-                                            <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }} />
-                                            <Legend />
-                                            <Line type="monotone" dataKey="value" name="예상 수익률" stroke="#3b82f6" strokeWidth={3} dot={{ r: 6 }} />
-                                        </LineChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </Card>
-
-                            {/* 하단 리포트 및 레이더 차트 */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginTop: '24px' }}>
-                                <Card title="AI 분석 리포트">
-                                    <div style={{ color: 'var(--text2)', lineHeight: 1.6, fontSize: '14px', whiteSpace: 'pre-wrap' }}>
-                                        {recommendationText}
-                                    </div>
-                                </Card>
-
-                                <Card title="지표 민감도 분석">
-                                    <div style={{ width: '100%', height: 280 }}>
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <RadarChart data={radarChartData}>
-                                                <PolarGrid stroke="#2a3a52" />
-                                                <PolarAngleAxis dataKey="subject" tick={{ fill: '#8b9eb7', fontSize: 12 }} />
-                                                <Tooltip />
-                                                <Radar name="내 포트폴리오" dataKey="portfolio" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.5} />
-                                                <Radar name="지수 평균" dataKey="index_avg" stroke="#10b981" fill="#10b981" fillOpacity={0.2} />
-                                            </RadarChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </Card>
-                            </div>
-                        </div>
+                    {result ? (
+                        <SimulationDashboard result={result} />
                     ) : (
                         <div className={styles.placeholder}>
                             <div className={styles.placeholderIcon}>{loading ? "⚙️" : "🔬"}</div>
@@ -214,6 +133,135 @@ export default function AiExperimentPage() {
                         </div>
                     )}
                 </div>
+            </div>
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 3. 분리된 하위 컴포넌트: 선택 리스트 (중복 제거)
+// ---------------------------------------------------------------------------
+interface SelectionListProps {
+    title: string;
+    items: GroupedItem[];
+    selectedId: number | null;
+    onSelect: (id: number) => void;
+    unit: string;
+}
+
+function SelectionList({ title, items, selectedId, onSelect, unit }: SelectionListProps) {
+    return (
+        <>
+            <div className={styles.sectionHeader}>{title}</div>
+            <div className={styles.list}>
+                {items.map(item => (
+                    <div
+                        key={item.id}
+                        className={`${styles.listItem} ${selectedId === item.id ? styles.listItemSelected : ''}`}
+                        onClick={() => onSelect(item.id)}
+                    >
+                        <div className={`${styles.listItemRadio} ${selectedId === item.id ? styles.listItemRadioSelected : ''}`}>
+                            {selectedId === item.id && <div className={styles.radioThumb} />}
+                        </div>
+                        <div>
+                            <div className={styles.listItemName}>
+                                {item.name}
+                                {item.group === '공개' && <span style={{ fontSize: 10, marginLeft: 6, color: 'var(--accent2)' }}>공개</span>}
+                            </div>
+                            <div className={styles.listItemMeta}>{unit} {item.count}개</div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 4. 분리된 하위 컴포넌트: 결과 대시보드
+// ---------------------------------------------------------------------------
+function SimulationDashboard({ result }: { result: AiSimulationResult }) {
+    const perfReturn = result.performance?.return || 0;
+    const perfDrawdown = result.performance?.drawdown || 0;
+    const perfScore = result.performance?.score || 0;
+    const simulationChartData = result.simulationChart || [];
+    const radarChartData = result.radarChart || [];
+    const recommendationText = result.recommendation || "분석 결과가 제공되지 않았습니다.";
+
+    const getDirectionBadge = (score: number) => {
+        if (score > 55) return <span className={styles.badgeUp}>📈 상승 (호재)</span>;
+        if (score < 45) return <span className={styles.badgeDown}>📉 하락 (악재)</span>;
+        return <span className={styles.badgeSteady}>➡️ 중립</span>;
+    };
+
+    return (
+        <div>
+            {/* 요약 카드 */}
+            <div className={styles.summaryGrid} style={{ marginBottom: '20px' }}>
+                <Card>
+                    <div className={styles.summaryItem}>
+                        <div className={styles.summaryLabel}>예상 수익률 (12M)</div>
+                        <div className={styles.summaryValue} style={{ color: '#3b82f6' }}>
+                            {perfReturn > 0 ? '+' : ''}{perfReturn}%
+                        </div>
+                    </div>
+                </Card>
+                <Card>
+                    <div className={styles.summaryItem}>
+                        <div className={styles.summaryLabel}>최대 낙폭 (MDD)</div>
+                        <div className={styles.summaryValue} style={{ color: '#ef4444' }}>
+                            {perfDrawdown}%
+                        </div>
+                    </div>
+                </Card>
+                <Card>
+                    <div className={styles.summaryItem}>
+                        <div className={styles.summaryLabel}>AI 스코어</div>
+                        <div className={styles.summaryValue}>
+                            {perfScore} / 10
+                        </div>
+                    </div>
+                </Card>
+            </div>
+
+            {/* 리포트 배너 */}
+            <div className={styles.reportBanner}>
+                <span className={styles.reportBadge}>AI ANALYSIS</span>
+                <span className={styles.reportText}>{recommendationText}</span>
+            </div>
+
+            {/* 메인 차트 및 지표 반응 리스트 */}
+            <div className={styles.resultDashboardGrid}>
+                <Card title="미래 성과 시뮬레이션 (3개월 ~ 1년)">
+                    <div style={{ width: '100%', height: 320 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={simulationChartData}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#2a3a52" />
+                                <XAxis dataKey="period" stroke="#8b9eb7" />
+                                <YAxis unit="%" stroke="#8b9eb7" />
+                                <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }} />
+                                <Legend />
+                                <Line type="monotone" dataKey="value" name="예상 수익률" stroke="#3b82f6" strokeWidth={3} dot={{ r: 6 }} />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+                </Card>
+
+                <Card title="지표별 포트폴리오 반응">
+                    <div className={styles.sensitivityList}>
+                        {radarChartData.map((item, idx) => (
+                            <div key={idx} className={styles.sensitivityRow}>
+                                <span className={styles.indicatorName}>{item.subject}</span>
+                                {getDirectionBadge(item.portfolio)}
+                            </div>
+                        ))}
+                        {radarChartData.length === 0 && (
+                            <div style={{ color: 'var(--text3)', textAlign: 'center', padding: '40px 0', fontSize: '13px' }}>
+                                분석된 지표 정보가 없습니다.
+                            </div>
+                        )}
+                    </div>
+                </Card>
             </div>
         </div>
     );
