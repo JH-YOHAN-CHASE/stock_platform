@@ -88,7 +88,7 @@ export default function PortfolioDetailPage() {
                     ) : (
                         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <span style={{ fontSize: '0.85rem', color: 'var(--text2)' }}>
-                👀 타인의 포트폴리오는 종목, 비중, 수익률만 조회됩니다.
+                👀 타인의 포트폴리오는 수량과 자산 총액을 제외하고 모두 조회됩니다.
               </span>
                             <Button variant="secondary" size="sm" onClick={() => navigate('/portfolios/compare')}>비교하기</Button>
                         </div>
@@ -108,15 +108,12 @@ export default function PortfolioDetailPage() {
                         {isOwner ? <>{totalValue.toLocaleString()}<span className={styles.summaryUnit}>원</span></> : '비공개'}
                     </div>
                 </Card>
-
-                {/* ⭐ 수익률 카드는 주인 유무 상관없이 모두에게 노출되도록 조건문 제거 */}
                 <Card>
                     <div className={styles.summaryLabel}>수익률</div>
                     <div className={styles.summaryValue} style={{ fontSize: 20, color: returnRate >= 0 ? 'var(--green)' : 'var(--red, #ef4444)' }}>
                         {returnRate >= 0 ? '+' : ''}{returnRate.toFixed(2)}<span className={styles.summaryUnit}>%</span>
                     </div>
                 </Card>
-
                 <Card>
                     <div className={styles.summaryLabel}>소유자</div>
                     <div className={styles.summaryValue} style={{ fontSize: 18 }}>{portfolio.userName}</div>
@@ -167,15 +164,13 @@ export default function PortfolioDetailPage() {
                             <thead>
                             <tr>
                                 <th>종목</th>
-                                {isOwner && (
-                                    <>
-                                        <th>수량</th>
-                                        <th>평균단가</th>
-                                        <th>평가금액</th>
-                                    </>
-                                )}
+                                {isOwner && <th>수량</th>}
+                                {/* 평균단가는 모두에게 공개 */}
+                                <th>평균단가</th>
+                                {isOwner && <th>평가금액</th>}
                                 <th>비중</th>
-                                {isOwner && <th>매수일</th>}
+                                {/* 매수일자도 모두에게 공개 */}
+                                <th>매수일</th>
                             </tr>
                             </thead>
                             <tbody>
@@ -186,15 +181,16 @@ export default function PortfolioDetailPage() {
                                             ? item.stockName
                                             : <><span className={styles.ticker}>({item.ticker})</span>{' '}{item.stockName}</>}
                                     </td>
-                                    {isOwner && (
-                                        <>
-                                            <td className="mono">{item.quantity.toLocaleString()}</td>
-                                            <td className="mono">{item.avgBuyPrice.toLocaleString('ko-KR')} 원</td>
-                                            <td className="mono">{(item.quantity * evalPrice(item)).toLocaleString('ko-KR')} 원</td>
-                                        </>
-                                    )}
+                                    {isOwner && <td className="mono">{item.quantity.toLocaleString()}</td>}
+
+                                    {/* 평균단가 행 (누구나 조회 가능) */}
+                                    <td className="mono">{item.avgBuyPrice.toLocaleString('ko-KR')} 원</td>
+
+                                    {isOwner && <td className="mono">{(item.quantity * evalPrice(item)).toLocaleString('ko-KR')} 원</td>}
                                     <td>{totalValue > 0 ? `${calcWeight(item).toFixed(2)}%` : '—'}</td>
-                                    {isOwner && <td className={styles.date}>{item.purchaseDate ?? '—'}</td>}
+
+                                    {/* 매수일자 행 (누구나 조회 가능) */}
+                                    <td className={styles.date}>{item.purchaseDate ?? '—'}</td>
                                 </tr>
                             ))}
                             </tbody>
