@@ -48,6 +48,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/indexes/public").permitAll()
                         .requestMatchers("/api/ai/**").permitAll()
                         .requestMatchers("/ws-chat/**").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/chat/history").permitAll()//과거 채팅
                         .anyRequest().authenticated()
             )
             .oauth2Login(oauth2 -> oauth2
