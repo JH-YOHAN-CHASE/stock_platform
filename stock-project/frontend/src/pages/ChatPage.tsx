@@ -20,7 +20,23 @@ interface AttachedItem {
 }
 
 const ChatPage: React.FC = () => {
-    const [currentUser] = useState({ userId: 1024, username: "채팅 실험이에유" });
+    //const [currentUser] = useState({ userId: 1024, username: "채팅 실험이에유" }); 전유물
+    const [currentUser] = useState(() => {
+        // 1. 발급받은 랜덤 정보 확인
+        const savedUser = sessionStorage.getItem('chatUser');
+        if (savedUser) return JSON.parse(savedUser);
+
+        // 2. 없다? 1~10000 사이의 무작위 번호로 번호 생성
+        const randomId = Math.floor(Math.random() * 10000) + 1;
+        const newUser = {
+            userId: randomId,
+            username: `익명투자자_${randomId}`
+        };
+
+        // 3. 브라우저 세션에 저장 (새로고침해도 이름 유지)
+        sessionStorage.setItem('chatUser', JSON.stringify(newUser));
+        return newUser;
+    });
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState('');
 
