@@ -76,8 +76,8 @@ public class AiAnalysisService {
 
                 ※ 엄격한 규칙:
                 1. 오직 아래 형태의 순수 JSON만 출력할 것. 다른 말은 절대 금지.
-                2. recommendation은 반드시 "1줄(50자 이내)"로 아주 짧게 핵심만 요약할 것.
-                3. radarChart의 'subject'는 제공된 지표명 유지, 점수만 변경.
+                2. recommendation은 반드시 선택한 '포트폴리오'와 선택한 '지표들의 조합인 지수'의 상관관계를 분석하여 "1줄(50자 이내)"의 핵심 투자 전략으로 작성할 것.
+                3. radarChart의 'subject'는 제공된 지표명 유지, 점수만 분석에 맞게 변경할 것.
 
                 {
                   "performance": { "return": 15.5, "drawdown": -4.2, "score": 8.5 },
@@ -86,7 +86,7 @@ public class AiAnalysisService {
                     { "period": "6개월", "value": 8.2 },
                     { "period": "1년", "value": 15.5 }
                   ],
-                  "recommendation": "금리 인상기 방어주 비중 확대 권장",
+                  "recommendation": "여기에 포트폴리오와 지수를 분석한 1줄 요약 전략을 작성할 것",
                   "radarChart": [
                 %s
                   ]
