@@ -31,8 +31,9 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
 
         Long userId = (Long) oAuth2User.getAttributes().get("userId");
         String email = (String) oAuth2User.getAttributes().get("email");
+        String role = (String) oAuth2User.getAttributes().get("role");
 
-        String accessToken  = jwtProvider.createAccessToken(userId, email);
+        String accessToken  = jwtProvider.createAccessToken(userId, email,role);
         String refreshToken = jwtProvider.createRefreshToken(userId);
 
         // 프론트엔드 콜백 URL로 토큰 전달

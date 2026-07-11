@@ -35,12 +35,15 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         Map<String, Object> attributes = Map.of(
                 "userId", user.getId(),
                 "email",  user.getEmail(),
-                "name",   user.getName()
+                "name",   user.getName(),
+                "role",user.getRole()
         );
 
         return new DefaultOAuth2User(List.of(), attributes, "email");
     }
 
+
+    //비동기 이벤트 처리 (Kafka 등 활용)해서 대규모 서비스에 어떻게 하는가 고민 하기
     private User saveOrUpdate(OAuth2UserInfo userInfo) {
         Optional<User> existing = userRepository
                 .findByProviderAndProviderId(userInfo.getProvider(), userInfo.getProviderId());
