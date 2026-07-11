@@ -23,7 +23,6 @@ public class AuthController {
     // 현재 로그인한 사용자 정보
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getMe(
-            @Valid
             @AuthenticationPrincipal Long userId) {
         User user = userService.getById(userId);
         Map<String, Object> data = Map.of(
@@ -46,7 +45,7 @@ public class AuthController {
         }
         Long userId = jwtProvider.getUserId(refreshToken);
         User user = userService.getById(userId);
-        String newAccessToken = jwtProvider.createAccessToken(userId, user.getEmail());
+        String newAccessToken = jwtProvider.createAccessToken(userId, user.getEmail(),user.getRole());
         return ResponseEntity.ok(ApiResponse.ok(Map.of("accessToken", newAccessToken)));
     }
 }
